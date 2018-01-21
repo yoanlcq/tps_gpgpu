@@ -28,7 +28,7 @@ OBJECTS_CUDA=$(OBJDIR)/deviceProperties.cu.o
 
 all: $(OBJECTS) $(OBJECTS_CUDA)
 	@echo "**** PHASE DE LIEN ****"
-	$(NVCC) $(LIBDIR) $(LIBS) $(OBJECTS) $(OBJECTS_CUDA) -o $(BIN)
+	$(NVCC) $(FLAGS_NVCC) $(LIBDIR) $(OBJECTS) $(OBJECTS_CUDA) -o $(BIN) $(LIBS)
 
 $(OBJDIR)/%.o: $(SRC)/%.cpp
 	@echo "**** $@ ****"

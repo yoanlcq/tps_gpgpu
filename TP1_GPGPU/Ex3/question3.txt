@@ -1,0 +1,30 @@
+Mesures :
+- Dimensions de bloc (16x16 ou 32x32);
+- Image
+- Durée d'allocation de mémoire
+- Durée d'exécution du kernel
+
+
+16x16, Lena:
+0.246304 ms
+0.227104 ms
+
+16x16, Plasma_2000x2000:
+0.78832 ms
+3.15667 ms
+
+16x16, Plasma_3000x3000:
+0.488512 ms
+9.79766 ms
+
+32x32, Lena:
+0.247936 ms
+0.30656 ms
+
+32x32, Plasma_2000x2000:
+0.320416 ms
+4.36035 ms
+
+32x32, Plasma_3000x3000:
+0.289088 ms
+9.85034 ms

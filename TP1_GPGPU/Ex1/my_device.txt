@@ -1,0 +1,44 @@
+-> 1 CUDA capable device(s)
+
+============================================
+               Device 0
+============================================
+ - name: GeForce GT 635M
+ - pciBusId: 1
+ - pciDeviceId: 0
+ - pciDomainId: 0
+============================================
+ - cuda version: 2.1
+ - is integrated: no
+ - max kernel execution time: yes
+ - device can overlap: yes
+ - concurrent kernels allowed: yes
+ - compute mode: no
+============================================
+ - total Mem: 1985 Mo
+ - shared Mem: 48 Ko
+ - total constant memory: 64 Ko
+ - memory pitch: 2047 Mo
+ - can map host memory: yes
+ - memory bus width: 128-bit
+ - memory clock rate: 900 MHz
+ - unified addressing: yes
+============================================
+ - registers per blocks: 32768
+ - warpSize: 32
+ - max threads dim: 1024, 1024, 64
+ - max threads per block: 1024
+ - max threads per multiprocessor: 1536
+ - max grid size: 65535, 65535, 65535
+ - multiProcessor count: 2
+============================================
+ - texture alignment: 512
+ - max Texture 1D: 65536
+ - max texture 2d: 65536, 65535
+ - max texture 3D: 2048, 2048, 2048
+============================================
+ - number of asynchronous engines: 1
+ - clock frequency: 950 MHz
+ - ECCEnabled: no
+ - level 2 cache size: 128 Ko
+

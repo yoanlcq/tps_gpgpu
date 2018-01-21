@@ -1,0 +1,116 @@
+-> 1 CUDA capable device(s)
+
+============================================
+               Device 0
+============================================
+ - name: GeForce GT 635M
+ - pciBusId: 1
+ - pciDeviceId: 0
+ - pciDomainId: 0
+============================================
+ - cuda version: 2.1
+ - is integrated: no
+ - max kernel execution time: yes
+ - device can overlap: yes
+ - concurrent kernels allowed: yes
+ - compute mode: no
+============================================
+ - total Mem: 1985 Mo
+ - shared Mem: 48 Ko
+ - total constant memory: 64 Ko
+ - memory pitch: 2047 Mo
+ - can map host memory: yes
+ - memory bus width: 128-bit
+ - memory clock rate: 900 MHz
+ - unified addressing: yes
+============================================
+ - registers per blocks: 32768
+ - warpSize: 32
+ - max threads dim: 1024, 1024, 64
+ - max threads per block: 1024
+ - max threads per multiprocessor: 1536
+ - max grid size: 65535, 65535, 65535
+ - multiProcessor count: 2
+============================================
+ - texture alignment: 512
+ - max Texture 1D: 65536
+ - max texture 2d: 65536, 65535
+ - max texture 3D: 2048, 2048, 2048
+============================================
+ - number of asynchronous engines: 1
+ - clock frequency: 950 MHz
+ - ECCEnabled: no
+ - level 2 cache size: 128 Ko
+
+
+Matrix size: 2x2, Threads: 16x16, Blocks: 1x1
+CPU alloc (2 matrices)   : 0.000000 ms
+GPU alloc (2 matrices)   : 0.122656 ms
+GPU upload (2 matrices)  : 0.014560 ms
+CPU addMatrices          : 0.000000 ms
+GPU addMatrices          : 0.018240 ms
+GPU download (1 matrix)  : 0.027296 ms
+Success: matrices do match!
+
+Matrix size: 2x2, Threads: 32x32, Blocks: 1x1
+CPU alloc (2 matrices)   : 0.001000 ms
+GPU alloc (2 matrices)   : 0.127328 ms
+GPU upload (2 matrices)  : 0.014784 ms
+CPU addMatrices          : 0.000000 ms
+GPU addMatrices          : 0.020448 ms
+GPU download (1 matrix)  : 0.026944 ms
+Success: matrices do match!
+
+Matrix size: 1024x1024, Threads: 16x16, Blocks: 65x65
+CPU alloc (2 matrices)   : 6.124000 ms
+GPU alloc (2 matrices)   : 0.312512 ms
+GPU upload (2 matrices)  : 2.687776 ms
+CPU addMatrices          : 3.230000 ms
+GPU addMatrices          : 0.808992 ms
+GPU download (1 matrix)  : 3.531936 ms
+Success: matrices do match!
+
+Matrix size: 1024x1024, Threads: 32x32, Blocks: 33x33
+CPU alloc (2 matrices)   : 6.104000 ms
+GPU alloc (2 matrices)   : 0.336928 ms
+GPU upload (2 matrices)  : 2.711168 ms
+CPU addMatrices          : 3.402000 ms
+GPU addMatrices          : 1.181792 ms
+GPU download (1 matrix)  : 1.453184 ms
+Success: matrices do match!
+
+Matrix size: 4096x4096, Threads: 16x16, Blocks: 257x257
+CPU alloc (2 matrices)   : 105.237000 ms
+GPU alloc (2 matrices)   : 0.494112 ms
+GPU upload (2 matrices)  : 38.533695 ms
+CPU addMatrices          : 52.195999 ms
+GPU addMatrices          : 10.944416 ms
+GPU download (1 matrix)  : 21.397408 ms
+Success: matrices do match!
+
+Matrix size: 4096x4096, Threads: 32x32, Blocks: 129x129
+CPU alloc (2 matrices)   : 103.634003 ms
+GPU alloc (2 matrices)   : 0.434144 ms
+GPU upload (2 matrices)  : 38.562721 ms
+CPU addMatrices          : 51.722000 ms
+GPU addMatrices          : 18.868193 ms
+GPU download (1 matrix)  : 23.762848 ms
+Success: matrices do match!
+
+Matrix size: 10000x10000, Threads: 16x16, Blocks: 626x626
+CPU alloc (2 matrices)   : 627.665039 ms
+GPU alloc (2 matrices)   : 1.098688 ms
+GPU upload (2 matrices)  : 230.385635 ms
+CPU addMatrices          : 308.210022 ms
+GPU addMatrices          : 63.199329 ms
+GPU download (1 matrix)  : 129.708633 ms
+Success: matrices do match!
+
+Matrix size: 10000x10000, Threads: 32x32, Blocks: 313x313
+CPU alloc (2 matrices)   : 620.322021 ms
+GPU alloc (2 matrices)   : 1.420608 ms
+GPU upload (2 matrices)  : 230.618469 ms
+CPU addMatrices          : 310.545013 ms
+GPU addMatrices          : 106.556351 ms
+GPU download (1 matrix)  : 126.931839 ms
+Success: matrices do match!

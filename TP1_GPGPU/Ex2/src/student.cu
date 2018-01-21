@@ -45,7 +45,7 @@ namespace IMAC
         cudaMemcpy(dev_a, a, bytes, cudaMemcpyHostToDevice);
         cudaMemcpy(dev_b, b, bytes, cudaMemcpyHostToDevice);
 
-        int n_threads = 256;
+        int n_threads = 512;
         int n_blocks = 1 + size/256;
 
 		// Launch kernel

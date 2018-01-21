@@ -7,7 +7,7 @@
 BIN=sepia
 # FLAG
 FLAGS=-Wall -O3
-FLAGS_NVCC= 
+FLAGS_NVCC=
 # INCLUDES
 INC=-I./include -I/usr/local/cuda/include
 # SRC Directory
@@ -28,7 +28,7 @@ OBJECTS_CUDA=$(OBJDIR)/main.cu.o $(OBJDIR)/student.cu.o $(OBJDIR)/chronoGPU.cu.o
 
 all: $(OBJECTS) $(OBJECTS_CUDA)
 	@echo "**** PHASE DE LIEN ****"
-	$(NVCC) $(LIBDIR) $(LIBS) $(OBJECTS) $(OBJECTS_CUDA) -o $(BIN)
+	$(NVCC) $(FLAGS_NVCC) $(LIBDIR) $(OBJECTS) $(OBJECTS_CUDA) -o $(BIN) $(LIBS)
 
 $(OBJDIR)/%.o: $(SRC)/%.cpp
 	@echo "**** $@ ****"
