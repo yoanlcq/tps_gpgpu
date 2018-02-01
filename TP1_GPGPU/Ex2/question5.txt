@@ -1,0 +1,30 @@
+Les deux temps mesurés sont :
+- Allocating input
+- Launching kernel
+
+"Allocating input" varie pas mal de run en run, et n'est pas une mesure
+très précise (je ne fais pas de moyennes ici).
+
+256 threads, N=256:
+0.21232 ms
+0.021888 ms
+
+256 threads, N=2048:
+0.1816 ms
+0.022848 ms
+
+256 threads, N=10000000:
+0.545344 ms
+4.9057 ms
+
+512 threads, N=256:
+0.175872 ms
+0.02032 ms
+
+512 threads, N=2048:
+0.153536 ms
+0.019872 ms
+
+512 threads, N=10000000:
+0.607424 ms
+4.90307 ms

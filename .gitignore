@@ -1,7 +1,8 @@
 square
-*.i
-*.ii
-*.gpu
-*.ptx
-*.cubin
-*.fatbin
+**/*.o
+**/*.i
+**/*.ii
+**/*.gpu
+**/*.ptx
+**/*.cubin
+**/*.fatbin
