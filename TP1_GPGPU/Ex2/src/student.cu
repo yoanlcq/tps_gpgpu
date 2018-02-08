@@ -15,6 +15,7 @@ namespace IMAC
 	__global__ void sumArraysCUDA(const int n, const int *const dev_a, const int *const dev_b, int *const dev_res)
 	{
         const int i = blockIdx.x * blockDim.x + threadIdx.x;
+        // FIXME: blockDim.x, gridDim.x
         if(i < n)
             dev_res[i] = dev_a[i] + dev_b[i];
 	}
