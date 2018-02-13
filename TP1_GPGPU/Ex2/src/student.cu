@@ -12,12 +12,14 @@
 
 namespace IMAC
 {
-	__global__ void sumArraysCUDA(const int n, const int *const dev_a, const int *const dev_b, int *const dev_res)
+	__global__ void sumArraysCUDA(const int n, const int *const dev_a, const int *const dev_b, int *const dev_res, int blockCountX)
 	{
-        const int i = blockIdx.x * blockDim.x + threadIdx.x;
-        // FIXME: blockDim.x, gridDim.x
-        if(i < n)
+        for(int bc=0 ; ; ++bc) {
+            const int i = (bc * blockCountX + blockIdx.x) * blockDim.x + threadIdx.x;
+            if(i >= n)
+                break;
             dev_res[i] = dev_a[i] + dev_b[i];
+        }
 	}
 
     void studentJob(const int size, const int *const a, const int *const b, int *const res)
@@ -47,12 +49,12 @@ namespace IMAC
         cudaMemcpy(dev_b, b, bytes, cudaMemcpyHostToDevice);
 
         int n_threads = 512;
-        int n_blocks = 1 + size/256;
+        int n_blocks = min(65535, (size + n_threads - 1) / n_threads);
 
 		// Launch kernel
         std::cout << "Launching kernel..." << std::endl;
 		chrGPU.start();
-        sumArraysCUDA<<<n_blocks, n_threads>>>(size, dev_a, dev_b, dev_res);
+        sumArraysCUDA<<<n_blocks, n_threads>>>(size, dev_a, dev_b, dev_res, n_blocks);
 		chrGPU.stop();
 		std::cout 	<< "-> Done : " << chrGPU.elapsedTime() << " ms" << std::endl << std::endl;
 
