@@ -20,7 +20,7 @@ LIBS=-lcuda -lcudart
 OBJDIR=obj
 # OBJET Directory
 NVCC=nvcc
-GPP=
+GPP=g++
 # $(OBJECTS) sont les objets des fichiers C / C++ standard qui seront générés après la compilation
 OBJECTS= $(OBJDIR)/chronoCPU.o
 # $(OBJECTS_CUDA) sont les objets des fichiers contenant du CUDA (.cu)

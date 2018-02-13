@@ -14,19 +14,25 @@
 
 namespace IMAC
 {
-    __global__ void sepiaCUDA(const uchar* in, uint width, uint height, uchar* out)
+    __global__ void sepiaCUDA(const uchar* in, uint width, uint height, uchar* out, dim3 blockCount)
     {
-        const uint x = blockIdx.x * blockDim.x + threadIdx.x;
-        const uint y = blockIdx.y * blockDim.y + threadIdx.y;
-        if(x >= width || y >= height)
-            return;
-        const uint i = (y * width + x) * 3;
-        const uchar r = in[i+0];
-        const uchar g = in[i+1];
-        const uchar b = in[i+2];
-        out[i+0] = fminf(255.f, r * .393f + g * .769f + b * .189f);
-        out[i+1] = fminf(255.f, r * .349f + g * .686f + b * .168f);
-        out[i+2] = fminf(255.f, r * .272f + g * .534f + b * .131f);
+        for(uint by=0 ; ; ++by) {
+            const uint y = (by * blockCount.y + blockIdx.y) * blockDim.y + threadIdx.y;
+            if(y >= height)
+                break;
+            for(uint bx=0 ; ; ++bx) {
+                const uint x = (bx * blockCount.x + blockIdx.x) * blockDim.x + threadIdx.x;
+                if(x >= width)
+                    break;
+                const uint i = (y * width + x) * 3;
+                const uchar r = in[i+0];
+                const uchar g = in[i+1];
+                const uchar b = in[i+2];
+                out[i+0] = fminf(255.f, r * .393f + g * .769f + b * .189f);
+                out[i+1] = fminf(255.f, r * .349f + g * .686f + b * .168f);
+                out[i+2] = fminf(255.f, r * .272f + g * .534f + b * .131f);
+            }
+        }
     }
 
     void studentJob(const std::vector<uchar> &input, const uint width, const uint height, std::vector<uchar> &output)
@@ -54,11 +60,14 @@ namespace IMAC
         // 16*16 = 256 threads/tile
         // 32*32 = 1024 threads/tile
         dim3 tile_size(32, 32);
-        dim3 n_tiles(1 + width/tile_size.x, 1 + height/tile_size.y);
+        dim3 n_tiles(
+            min(65535, (width  + tile_size.x - 1) / tile_size.x),
+            min(65535, (height + tile_size.y - 1) / tile_size.y)
+        );
 
         std::cout << "Launching kernel..." << std::endl;
         chrGPU.start();
-        sepiaCUDA<<<n_tiles, tile_size>>>(dev_in, width, height, dev_out);
+        sepiaCUDA<<<n_tiles, tile_size>>>(dev_in, width, height, dev_out, n_tiles);
         chrGPU.stop();
         std::cout   << "-> Done : " << chrGPU.elapsedTime() << " ms" << std::endl << std::endl;
 
