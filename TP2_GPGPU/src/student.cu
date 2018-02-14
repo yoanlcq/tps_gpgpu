@@ -186,7 +186,7 @@ namespace IMAC
 
     texture<uchar4, cudaTextureType2D, cudaReadModeElementType> g_dev_src_tex_2d;
 
-    __global__ void convCUDAEx4(const uint w, const uint h, const uint mat_size, uchar4* dst, const uint texelOffset) {
+    __global__ void convCUDAEx4(const uint w, const uint h, const uint mat_size, uchar4* dst) {
         for(uint y = blockIdx.y * blockDim.y + threadIdx.y ; y < h ; y += gridDim.y * blockDim.y) {
             for(uint x = blockIdx.x * blockDim.x + threadIdx.x ; x < w ; x += gridDim.x * blockDim.x) {
                 float3 sum = make_float3(0.f, 0.f, 0.f);
@@ -194,10 +194,10 @@ namespace IMAC
                 // Convolution
                 for(uint j=0 ; j<mat_size ; ++j) {
                     for(uint i=0 ; i<mat_size ; ++i) {
-                        const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1+texelOffset);
+                        const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1);
                         const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
                         const uint iMat = j * mat_size + i;
-                        const uchar4 texel = tex2D(g_dev_src_tex_2d, texelOffset + dX + 0.5f, dY + 0.5f);
+                        const uchar4 texel = tex2D(g_dev_src_tex_2d, dX + 0.5f, dY + 0.5f);
                         sum.x += float(texel.x) * g_cst_dev_mat[iMat];
                         sum.y += float(texel.y) * g_cst_dev_mat[iMat];
                         sum.z += float(texel.z) * g_cst_dev_mat[iMat];
@@ -402,12 +402,8 @@ namespace IMAC
         g_dev_src_tex_2d.addressMode[1] = cudaAddressModeClamp;
         g_dev_src_tex_2d.addressMode[2] = cudaAddressModeClamp;
 
-        size_t texOffset = 0;
-        cudaError_t status = cudaBindTexture2D(&texOffset, g_dev_src_tex_2d, dev_src, imgWidth, imgHeight, srcPitch);
+        cudaError_t status = cudaBindTexture2D(NULL, g_dev_src_tex_2d, dev_src, imgWidth, imgHeight, srcPitch);
         assert(status == cudaSuccess);
-        std::cout << "NOTE: texOffset = " << texOffset << " bytes" << std::endl;
-        // https://devtalk.nvidia.com/default/topic/489344/cudabindtexture2d-and-offset/
-
 
         // 16*16 = 256 threads/tile
         // 32*32 = 1024 threads/tile
@@ -419,7 +415,7 @@ namespace IMAC
 
         {
             ScopedChronoGPU chr("Process on GPU (parallel)");
-            convCUDAEx4<<<n_blocks, n_threads>>>(imgWidth, imgHeight, matSize, dev_dst, texOffset / sizeof(uchar4));
+            convCUDAEx4<<<n_blocks, n_threads>>>(imgWidth, imgHeight, matSize, dev_dst);
         }
 
         {
