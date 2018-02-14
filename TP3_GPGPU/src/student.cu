@@ -12,10 +12,18 @@
 namespace IMAC
 {
 	// ==================================================== Ex 0
-    __global__
-    void maxReduce_ex1(const uint *const dev_array, const uint size, uint *const dev_partialMax)
-	{
-		/// TODO
+    __global__ void maxReduce_ex1(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
+        extern __shared__ uint sharedMem[];
+        for(uint id = blockIdx.x * blockDim.x + threadIdx.x ; id < size ; id += gridDim.x * blockDim.x) {
+            for(uint stride=1 ;  ; stride += stride) {
+                const uint i = id * 2 * stride;
+                const uint j = i + stride;
+                if(i >= size || j >= size)
+                    break;
+                sharedMem[i] = max(sharedMem[i], sharedMem[j]);
+                __syncthreads();
+            }
+        }
 	}
 
 	void studentJob(const std::vector<uint> &array, const uint resCPU /* Just for comparison */)

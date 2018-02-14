@@ -75,7 +75,7 @@ namespace IMAC
 		/// TODO
 		std::vector<uint> host_partialMax(0); // Replace size !
 		uint *dev_partialMax;
-		const size_t bytesPartialMax = 0; // Replace bytes !
+		const size_t bytesPartialMax = host_partialMax.size() * sizeof host_partialMax[0]; // Replace bytes !
 
 		ChronoGPU chrGPU;
 		float2 timing; // x: timing GPU, y: timing CPU
@@ -88,7 +88,7 @@ namespace IMAC
 			{
 				case KERNEL_EX1:
 					/// TODO EX 1
-					maxReduce_ex1<<<dimBlockGrid.y, dimBlockGrid.x>>>(dev_array, size, dev_partialMax);
+					maxReduce_ex1<<<dimBlockGrid.y, dimBlockGrid.x, sharedMemSize_ex1>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX2:
 					/// TODO EX 2

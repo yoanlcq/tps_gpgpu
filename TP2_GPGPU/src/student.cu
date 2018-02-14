@@ -419,7 +419,7 @@ namespace IMAC
 
         {
             ScopedChronoGPU chr("Process on GPU (parallel)");
-            convCUDAEx4<<<n_blocks, n_threads>>>(imgWidth, imgHeight, matSize, dev_dst, texOffset * sizeof(uchar4));
+            convCUDAEx4<<<n_blocks, n_threads>>>(imgWidth, imgHeight, matSize, dev_dst, texOffset / sizeof(uchar4));
         }
 
         {
