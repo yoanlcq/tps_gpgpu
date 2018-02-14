@@ -14,16 +14,10 @@
 
 namespace IMAC
 {
-    __global__ void sepiaCUDA(const uchar* in, uint width, uint height, uchar* out, dim3 blockCount)
+    __global__ void sepiaCUDA(const uchar* in, uint width, uint height, uchar* out)
     {
-        for(uint by=0 ; ; ++by) {
-            const uint y = (by * blockCount.y + blockIdx.y) * blockDim.y + threadIdx.y;
-            if(y >= height)
-                break;
-            for(uint bx=0 ; ; ++bx) {
-                const uint x = (bx * blockCount.x + blockIdx.x) * blockDim.x + threadIdx.x;
-                if(x >= width)
-                    break;
+        for(uint y = blockIdx.y * blockDim.y + threadIdx.y ; y < height ; y += gridDim.y * blockDim.y) {
+            for(uint x = blockIdx.x * blockDim.x + threadIdx.x ; x < width ; x += gridDim.x * blockDim.x) {
                 const uint i = (y * width + x) * 3;
                 const uchar r = in[i+0];
                 const uchar g = in[i+1];
@@ -67,7 +61,7 @@ namespace IMAC
 
         std::cout << "Launching kernel..." << std::endl;
         chrGPU.start();
-        sepiaCUDA<<<n_tiles, tile_size>>>(dev_in, width, height, dev_out, n_tiles);
+        sepiaCUDA<<<n_tiles, tile_size>>>(dev_in, width, height, dev_out);
         chrGPU.stop();
         std::cout   << "-> Done : " << chrGPU.elapsedTime() << " ms" << std::endl << std::endl;
 

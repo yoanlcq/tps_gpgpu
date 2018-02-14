@@ -7,15 +7,9 @@
 #include "chronoCPU.hpp"
 #include "chronoGPU.hpp"
 
-__global__ void addMatricesCUDA(float* a, const float* b, uint w, uint h, dim3 blockCount) {
-    for(uint by=0 ; ; ++by) {
-        const uint y = (by * blockCount.y + blockIdx.y) * blockDim.y + threadIdx.y;
-        if(y >= h)
-            break;
-        for(uint bx=0 ; ; ++bx) {
-            const uint x = (bx * blockCount.x + blockIdx.x) * blockDim.x + threadIdx.x;
-            if(x >= w)
-                break;
+__global__ void addMatricesCUDA(float* a, const float* b, uint w, uint h) {
+    for(uint y = blockIdx.y * blockDim.y + threadIdx.y ; y < h ; y += gridDim.y * blockDim.y) {
+        for(uint x = blockIdx.x * blockDim.x + threadIdx.x ; x < w ; x += gridDim.x * blockDim.x) {
             const uint i = y * w + x;
             a[i] += b[i];
         }
@@ -126,7 +120,7 @@ int main(int argc, char *argv[]) {
     printTimeMs("CPU addMatrices", chrCPU.elapsedTime());
 
     chrGPU.start();
-    addMatricesCUDA<<<n_tiles, tile_size>>>(dev_a, dev_b, w, h, n_tiles);
+    addMatricesCUDA<<<n_tiles, tile_size>>>(dev_a, dev_b, w, h);
     chrGPU.stop();
     printTimeMs("GPU addMatrices", chrGPU.elapsedTime());
 

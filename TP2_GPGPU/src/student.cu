@@ -73,34 +73,36 @@ namespace IMAC
         const float* mat, const uint mat_size,
         uchar4* dst)
     {
-        const uint i = blockIdx.x * blockDim.x + threadIdx.x;
-        const uint y = i / w;
-        const uint x = i - y*w;
-        float3 sum = make_float3(0.f, 0.f, 0.f);
+        for(uint i = blockIdx.x * blockDim.x + threadIdx.x ;  ; i += gridDim.x * blockDim.x) {
+            const uint y = i / w;
+            const uint x = i - y*w;
 
-        if(x >= w || y >= h)
-            return;
+            if(y >= h)
+                break;
 
-        // Convolution
-        for(uint j=0 ; j<mat_size ; ++j) {
-            for(uint i=0 ; i<mat_size ; ++i) {
-                const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1);
-                const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
-                const uint iMat	  = j * mat_size + i;
-                const uint iPixel = dY * w + dX;
-                sum.x += float(src[iPixel].x) * mat[iMat];
-                sum.y += float(src[iPixel].y) * mat[iMat];
-                sum.z += float(src[iPixel].z) * mat[iMat];
+            float3 sum = make_float3(0.f, 0.f, 0.f);
+
+            // Convolution
+            for(uint j=0 ; j<mat_size ; ++j) {
+                for(uint i=0 ; i<mat_size ; ++i) {
+                    const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1);
+                    const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
+                    const uint iMat	  = j * mat_size + i;
+                    const uint iPixel = dY * w + dX;
+                    sum.x += float(src[iPixel].x) * mat[iMat];
+                    sum.y += float(src[iPixel].y) * mat[iMat];
+                    sum.z += float(src[iPixel].z) * mat[iMat];
+                }
             }
-        }
 
-        const uint iOut = y * w + x;
-        dst[iOut] = make_uchar4(
-            clampfCUDA(sum.x, 0, 255),
-            clampfCUDA(sum.y, 0, 255),
-            clampfCUDA(sum.z, 0, 255),
-            255
-        );
+            const uint iOut = y * w + x;
+            dst[iOut] = make_uchar4(
+                clampfCUDA(sum.x, 0, 255),
+                clampfCUDA(sum.y, 0, 255),
+                clampfCUDA(sum.z, 0, 255),
+                255
+            );
+        }
     }
 
 
@@ -110,34 +112,36 @@ namespace IMAC
     __constant__ float g_cst_dev_mat[MAX_MAT_ELEMENT_COUNT];
 
     __global__ void convCUDAEx2(const uchar4* src, const uint w, const uint h, const uint mat_size, uchar4* dst) {
-        const uint i = blockIdx.x * blockDim.x + threadIdx.x;
-        const uint y = i / w;
-        const uint x = i - y*w;
-        float3 sum = make_float3(0.f, 0.f, 0.f);
+        for(uint i = blockIdx.x * blockDim.x + threadIdx.x ;  ; i += gridDim.x * blockDim.x) {
+            const uint y = i / w;
+            const uint x = i - y*w;
 
-        if(x >= w || y >= h)
-            return;
+            if(y >= h)
+                break;
 
-        // Convolution
-        for(uint j=0 ; j<mat_size ; ++j) {
-            for(uint i=0 ; i<mat_size ; ++i) {
-                const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1);
-                const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
-                const uint iMat	  = j * mat_size + i;
-                const uint iPixel = dY * w + dX;
-                sum.x += float(src[iPixel].x) * g_cst_dev_mat[iMat];
-                sum.y += float(src[iPixel].y) * g_cst_dev_mat[iMat];
-                sum.z += float(src[iPixel].z) * g_cst_dev_mat[iMat];
+            float3 sum = make_float3(0.f, 0.f, 0.f);
+
+            // Convolution
+            for(uint j=0 ; j<mat_size ; ++j) {
+                for(uint i=0 ; i<mat_size ; ++i) {
+                    const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1);
+                    const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
+                    const uint iMat	  = j * mat_size + i;
+                    const uint iPixel = dY * w + dX;
+                    sum.x += float(src[iPixel].x) * g_cst_dev_mat[iMat];
+                    sum.y += float(src[iPixel].y) * g_cst_dev_mat[iMat];
+                    sum.z += float(src[iPixel].z) * g_cst_dev_mat[iMat];
+                }
             }
-        }
 
-        const uint iOut = y * w + x;
-        dst[iOut] = make_uchar4(
-            clampfCUDA(sum.x, 0, 255),
-            clampfCUDA(sum.y, 0, 255),
-            clampfCUDA(sum.z, 0, 255),
-            255
-        );
+            const uint iOut = y * w + x;
+            dst[iOut] = make_uchar4(
+                clampfCUDA(sum.x, 0, 255),
+                clampfCUDA(sum.y, 0, 255),
+                clampfCUDA(sum.z, 0, 255),
+                255
+            );
+        }
     }
 
     // Ex3
@@ -145,35 +149,37 @@ namespace IMAC
     texture<uchar4, cudaTextureType1D, cudaReadModeElementType> g_dev_src_tex_1d;
 
     __global__ void convCUDAEx3(const uint w, const uint h, const uint mat_size, uchar4* dst) {
-        const uint i = blockIdx.x * blockDim.x + threadIdx.x;
-        const uint y = i / w;
-        const uint x = i - y*w;
-        float3 sum = make_float3(0.f, 0.f, 0.f);
+        for(uint i = blockIdx.x * blockDim.x + threadIdx.x ;  ; i += gridDim.x * blockDim.x) {
+            const uint y = i / w;
+            const uint x = i - y*w;
 
-        if(x >= w || y >= h)
-            return;
+            if(y >= h)
+                break;
 
-        // Convolution
-        for(uint j=0 ; j<mat_size ; ++j) {
-            for(uint i=0 ; i<mat_size ; ++i) {
-                const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1);
-                const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
-                const uint iMat	  = j * mat_size + i;
-                const uint iPixel = dY * w + dX;
-                uchar4 texel = tex1Dfetch(g_dev_src_tex_1d, iPixel);
-                sum.x += float(texel.x) * g_cst_dev_mat[iMat];
-                sum.y += float(texel.y) * g_cst_dev_mat[iMat];
-                sum.z += float(texel.z) * g_cst_dev_mat[iMat];
+            float3 sum = make_float3(0.f, 0.f, 0.f);
+
+            // Convolution
+            for(uint j=0 ; j<mat_size ; ++j) {
+                for(uint i=0 ; i<mat_size ; ++i) {
+                    const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1);
+                    const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
+                    const uint iMat	  = j * mat_size + i;
+                    const uint iPixel = dY * w + dX;
+                    uchar4 texel = tex1Dfetch(g_dev_src_tex_1d, iPixel);
+                    sum.x += float(texel.x) * g_cst_dev_mat[iMat];
+                    sum.y += float(texel.y) * g_cst_dev_mat[iMat];
+                    sum.z += float(texel.z) * g_cst_dev_mat[iMat];
+                }
             }
-        }
 
-        const uint iOut = y * w + x;
-        dst[iOut] = make_uchar4(
-            clampfCUDA(sum.x, 0, 255),
-            clampfCUDA(sum.y, 0, 255),
-            clampfCUDA(sum.z, 0, 255),
-            255
-        );
+            const uint iOut = y * w + x;
+            dst[iOut] = make_uchar4(
+                clampfCUDA(sum.x, 0, 255),
+                clampfCUDA(sum.y, 0, 255),
+                clampfCUDA(sum.z, 0, 255),
+                255
+            );
+        }
     }
 
     // Ex4
@@ -181,33 +187,32 @@ namespace IMAC
     texture<uchar4, cudaTextureType2D, cudaReadModeElementType> g_dev_src_tex_2d;
 
     __global__ void convCUDAEx4(const uint w, const uint h, const uint mat_size, uchar4* dst, const uint texelOffset) {
-        const uint x = blockIdx.x * blockDim.x + threadIdx.x;
-        const uint y = blockIdx.y * blockDim.y + threadIdx.y;
-        float3 sum = make_float3(0.f, 0.f, 0.f);
+        for(uint y = blockIdx.y * blockDim.y + threadIdx.y ; y < h ; y += gridDim.y * blockDim.y) {
+            for(uint x = blockIdx.x * blockDim.x + threadIdx.x ; x < w ; x += gridDim.x * blockDim.x) {
+                float3 sum = make_float3(0.f, 0.f, 0.f);
 
-        if(x >= w || y >= h)
-            return;
+                // Convolution
+                for(uint j=0 ; j<mat_size ; ++j) {
+                    for(uint i=0 ; i<mat_size ; ++i) {
+                        const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1+texelOffset);
+                        const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
+                        const uint iMat = j * mat_size + i;
+                        const uchar4 texel = tex2D(g_dev_src_tex_2d, texelOffset + dX + 0.5f, dY + 0.5f);
+                        sum.x += float(texel.x) * g_cst_dev_mat[iMat];
+                        sum.y += float(texel.y) * g_cst_dev_mat[iMat];
+                        sum.z += float(texel.z) * g_cst_dev_mat[iMat];
+                    }
+                }
 
-        // Convolution
-        for(uint j=0 ; j<mat_size ; ++j) {
-            for(uint i=0 ; i<mat_size ; ++i) {
-                const int dX = clampiCUDA(x + i - mat_size / 2, 0, w-1+texelOffset);
-                const int dY = clampiCUDA(y + j - mat_size / 2, 0, h-1);
-                const uint iMat = j * mat_size + i;
-                const uchar4 texel = tex2D(g_dev_src_tex_2d, texelOffset + dX + 0.5f, dY + 0.5f);
-                sum.x += float(texel.x) * g_cst_dev_mat[iMat];
-                sum.y += float(texel.y) * g_cst_dev_mat[iMat];
-                sum.z += float(texel.z) * g_cst_dev_mat[iMat];
+                const uint iOut = y * w + x;
+                dst[iOut] = make_uchar4(
+                    clampfCUDA(sum.x, 0, 255),
+                    clampfCUDA(sum.y, 0, 255),
+                    clampfCUDA(sum.z, 0, 255),
+                    255
+                );
             }
         }
-
-        const uint iOut = y * w + x;
-        dst[iOut] = make_uchar4(
-            clampfCUDA(sum.x, 0, 255),
-            clampfCUDA(sum.y, 0, 255),
-            clampfCUDA(sum.z, 0, 255),
-            255
-        );
     }
 
 
@@ -245,7 +250,7 @@ namespace IMAC
         }
 
         const uint n_threads = 512;
-        const uint n_blocks = (inputImg.size()+n_threads-1) / n_threads;
+        const uint n_blocks = (inputImg.size() + n_threads - 1) / n_threads;
 
         {
             ScopedChronoGPU chr("Process on GPU (parallel)");
@@ -293,7 +298,7 @@ namespace IMAC
         }
 
         const uint n_threads = 512;
-        const uint n_blocks = (inputImg.size()+n_threads-1) / n_threads;
+        const uint n_blocks = (inputImg.size() + n_threads - 1) / n_threads;
 
         {
             ScopedChronoGPU chr("Process on GPU (parallel)");
@@ -343,7 +348,7 @@ namespace IMAC
         assert(status == cudaSuccess);
 
         const uint n_threads = 512;
-        const uint n_blocks = (inputImg.size()+n_threads-1) / n_threads;
+        const uint n_blocks = (inputImg.size() + n_threads - 1) / n_threads;
 
         {
             ScopedChronoGPU chr("Process on GPU (parallel)");
@@ -408,8 +413,8 @@ namespace IMAC
         // 32*32 = 1024 threads/tile
         const dim3 n_threads(16, 16);
         const dim3 n_blocks(
-            (imgWidth +n_threads.x-1) / n_threads.x,
-            (imgHeight+n_threads.y-1) / n_threads.y
+            (imgWidth  + n_threads.x - 1) / n_threads.x,
+            (imgHeight + n_threads.y - 1) / n_threads.y
         );
 
         {

@@ -12,12 +12,9 @@
 
 namespace IMAC
 {
-	__global__ void sumArraysCUDA(const int n, const int *const dev_a, const int *const dev_b, int *const dev_res, int blockCountX)
+	__global__ void sumArraysCUDA(const int n, const int *const dev_a, const int *const dev_b, int *const dev_res)
 	{
-        for(uint bx=0 ; ; ++bx) {
-            const int i = (bx * blockCountX + blockIdx.x) * blockDim.x + threadIdx.x;
-            if(i >= n)
-                break;
+        for(uint i = blockIdx.x * blockDim.x + threadIdx.x ; i < n ; i += gridDim.x * blockDim.x) {
             dev_res[i] = dev_a[i] + dev_b[i];
         }
 	}
@@ -54,7 +51,7 @@ namespace IMAC
 		// Launch kernel
         std::cout << "Launching kernel..." << std::endl;
 		chrGPU.start();
-        sumArraysCUDA<<<n_blocks, n_threads>>>(size, dev_a, dev_b, dev_res, n_blocks);
+        sumArraysCUDA<<<n_blocks, n_threads>>>(size, dev_a, dev_b, dev_res);
 		chrGPU.stop();
 		std::cout 	<< "-> Done : " << chrGPU.elapsedTime() << " ms" << std::endl << std::endl;
 
