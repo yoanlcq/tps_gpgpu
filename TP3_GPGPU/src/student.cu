@@ -12,17 +12,34 @@
 namespace IMAC
 {
 	// ==================================================== Ex 0
+    // Q2: Ca se foire parce qu'il n'y a pas assez de blocks et threads pour couvrir tout le tableau.
     __global__ void maxReduce_ex1(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
         extern __shared__ uint sharedMem[];
-        for(uint id = blockIdx.x * blockDim.x + threadIdx.x ; id < size ; id += gridDim.x * blockDim.x) {
-            for(uint stride=1 ;  ; stride += stride) {
-                const uint i = id * 2 * stride;
+
+        for(uint bi=0 ; ; bi += gridDim.x) {
+
+            const uint dev_i = (bi+blockIdx.x) * blockDim.x + threadIdx.x;
+            if(dev_i >= size)
+                return;
+            sharedMem[threadIdx.x] = dev_array[dev_i];
+            __syncthreads();
+
+            for(uint stride=1 ;  ; stride *= 2) {
+                const uint i = threadIdx.x * 2 * stride;
                 const uint j = i + stride;
-                if(i >= size || j >= size)
+                const uint dev_i = i + (bi+blockIdx.x) * blockDim.x;
+                const uint dev_j = j + (bi+blockIdx.x) * blockDim.x;
+                // TODO: Some of these checks are redundant
+                if(i >= blockDim.x || j >= blockDim.x)
                     break;
-                sharedMem[i] = max(sharedMem[i], sharedMem[j]);
+                if(dev_i >= size || dev_j >= size)
+                    break;
+                sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
                 __syncthreads();
             }
+
+            if(threadIdx.x == 0)
+                dev_partialMax[bi+blockIdx.x] = sharedMem[0];
         }
 	}
 

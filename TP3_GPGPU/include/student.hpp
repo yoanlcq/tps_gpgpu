@@ -19,7 +19,7 @@
 namespace IMAC
 {
 	const uint MAX_NB_THREADS = 1024; // En dur, changer si GPU plus ancien ;-)
-    const uint DEFAULT_NB_BLOCKS = 32768;
+    const uint DEFAULT_NB_BLOCKS = 65535;
 
     enum
     {
@@ -72,10 +72,12 @@ namespace IMAC
         const uint2 dimBlockGrid = configureKernel<kernelType>(size);
 
 		// Allocate arrays (host and device) for partial result
-		/// TODO
-		std::vector<uint> host_partialMax(0); // Replace size !
+		std::vector<uint> host_partialMax((size + dimBlockGrid.x - 1) / dimBlockGrid.x);
 		uint *dev_partialMax;
-		const size_t bytesPartialMax = host_partialMax.size() * sizeof host_partialMax[0]; // Replace bytes !
+		const size_t bytesPartialMax = host_partialMax.size() * sizeof host_partialMax[0];
+
+        HANDLE_ERROR(cudaMalloc((void**)&dev_partialMax, bytesPartialMax));
+        HANDLE_ERROR(cudaMemset(dev_partialMax, 0, bytesPartialMax));
 
 		ChronoGPU chrGPU;
 		float2 timing; // x: timing GPU, y: timing CPU
@@ -88,7 +90,7 @@ namespace IMAC
 			{
 				case KERNEL_EX1:
 					/// TODO EX 1
-					maxReduce_ex1<<<dimBlockGrid.y, dimBlockGrid.x, sharedMemSize_ex1>>>(dev_array, size, dev_partialMax);
+					maxReduce_ex1<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX2:
 					/// TODO EX 2
