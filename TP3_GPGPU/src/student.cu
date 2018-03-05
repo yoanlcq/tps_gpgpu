@@ -18,12 +18,7 @@ namespace IMAC
         extern __shared__ uint sharedMem[];
 
         const uint dev_i = blockIdx.x * blockDim.x + threadIdx.x;
-        if(dev_i < size) {
-            sharedMem[threadIdx.x] = dev_array[dev_i];
-        } else {
-            sharedMem[threadIdx.x] = 0;
-            return;
-        }
+        sharedMem[threadIdx.x] = (dev_i < size) * dev_array[dev_i];
 
         for(uint stride=1 ; ; stride *= 2) {
             const uint i = threadIdx.x * 2 * stride;
@@ -33,7 +28,6 @@ namespace IMAC
             __syncthreads();
             sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
         }
-
 
         __syncthreads();
         if(threadIdx.x == 0)
