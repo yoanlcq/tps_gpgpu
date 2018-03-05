@@ -58,7 +58,8 @@ namespace IMAC
 				dimBlockGrid.y = (sizeArray + 2*dimBlockGrid.x - 1) / (2*dimBlockGrid.x);
 			break;
 			case KERNEL_EX4:
-				/// TODO EX 4
+                dimBlockGrid.x = MAX_NB_THREADS; 
+				dimBlockGrid.y = (sizeArray + 2*dimBlockGrid.x - 1) / (2*dimBlockGrid.x);
 			break;
 			case KERNEL_EX5:
 				/// TODO EX 5
@@ -104,7 +105,7 @@ namespace IMAC
 					maxReduce_ex3<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*2*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX4:
-					/// TODO EX 4
+					maxReduce_ex4<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*2*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX5:
 					/// TODO EX 5
