@@ -31,8 +31,11 @@ namespace IMAC
         KERNEL_EX5
     };
 
-    __global__
-    void maxReduce_ex1(const uint *const dev_array, const uint size, uint *const dev_partialMax);
+    __global__ void maxReduce_ex1(const uint *const dev_array, const uint size, uint *const dev_partialMax);
+    __global__ void maxReduce_ex2(const uint *const dev_array, const uint size, uint *const dev_partialMax);
+    __global__ void maxReduce_ex3(const uint *const dev_array, const uint size, uint *const dev_partialMax);
+    __global__ void maxReduce_ex4(const uint *const dev_array, const uint size, uint *const dev_partialMax);
+    __global__ void maxReduce_ex5(const uint *const dev_array, const uint size, uint *const dev_partialMax);
    
     template<uint kernelType>
     uint2 configureKernel(const uint sizeArray)
@@ -47,10 +50,12 @@ namespace IMAC
 				dimBlockGrid.y = (sizeArray + dimBlockGrid.x - 1) / dimBlockGrid.x;
 			break;
 			case KERNEL_EX2:
-				/// TODO EX 2
+				dimBlockGrid.x = MAX_NB_THREADS; 
+				dimBlockGrid.y = (sizeArray + dimBlockGrid.x - 1) / dimBlockGrid.x;
 			break;
 			case KERNEL_EX3:
-				/// TODO EX 3
+                dimBlockGrid.x = MAX_NB_THREADS; 
+				dimBlockGrid.y = (sizeArray + 2*dimBlockGrid.x - 1) / (2*dimBlockGrid.x);
 			break;
 			case KERNEL_EX4:
 				/// TODO EX 4
@@ -90,14 +95,13 @@ namespace IMAC
 			switch(kernelType) // Template : evaluation at compilation time ! ;-)
 			{
 				case KERNEL_EX1:
-					/// TODO EX 1
 					maxReduce_ex1<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX2:
-					/// TODO EX 2
+					maxReduce_ex2<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX3:
-					/// TODO EX 3
+					maxReduce_ex3<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*2*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX4:
 					/// TODO EX 4

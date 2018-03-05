@@ -18,23 +18,85 @@ namespace IMAC
         extern __shared__ uint sharedMem[];
 
         const uint dev_i = blockIdx.x * blockDim.x + threadIdx.x;
-        if(dev_i >= size)
+        if(dev_i < size) {
+            sharedMem[threadIdx.x] = dev_array[dev_i];
+        } else {
+            sharedMem[threadIdx.x] = 0;
             return;
-        sharedMem[threadIdx.x] = dev_array[dev_i];
-        __syncthreads();
+        }
 
-        for(uint stride=1 ;  ; stride *= 2) {
+        for(uint stride=1 ; ; stride *= 2) {
             const uint i = threadIdx.x * 2 * stride;
             const uint j = i + stride;
             if(j >= blockDim.x)
                 break;
-            sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
             __syncthreads();
+            sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
         }
 
+
+        __syncthreads();
         if(threadIdx.x == 0)
             dev_partialMax[blockIdx.x] = sharedMem[0];
 	}
+
+    __global__ void maxReduce_ex2(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
+        extern __shared__ uint sharedMem[];
+
+        const uint dev_i = blockIdx.x * blockDim.x + threadIdx.x;
+        sharedMem[threadIdx.x] = (dev_i < size) * dev_array[dev_i];
+
+        for(uint stride = blockDim.x/2 ; stride > 0 ; stride /= 2) {
+            const uint i = threadIdx.x;
+            const uint j = i + stride;
+            if(i >= stride)
+                return; // NOTE: return, not break.
+            __syncthreads();
+            sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
+        }
+
+        __syncthreads();
+        // If we're here, threadIdx.x == 0.
+        dev_partialMax[blockIdx.x] = sharedMem[0];
+	}
+
+    __global__ void maxReduce_ex3(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
+        extern __shared__ uint sharedMem[];
+
+        // If 1 block = 1024 threads, then sharedMem has 2048 elements here.
+        // Each block processes 2048 elements, and each thread has 2 load/stores to perform: Tidx and Tidx+1024.
+        // At step 0, elements from 0 to 1024 are stored in sharedMem.
+        // At step 1, elements from 1024 to 2048 are stored in sharedMem.
+        for(uint step=0 ; step<=1 ; ++step) {
+            const uint shm_i = threadIdx.x + step * blockDim.x;
+            const uint dev_i = blockIdx.x * 2 * blockDim.x + shm_i;
+            sharedMem[shm_i] = (dev_i < size) * dev_array[dev_i];
+        }
+
+        for(uint stride = blockDim.x ; stride > 0 ; stride /= 2) {
+            const uint i = threadIdx.x;
+            const uint j = i + stride;
+            if(i >= stride)
+                return; // NOTE: return, not break.
+            __syncthreads();
+            sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
+        }
+
+        __syncthreads();
+        // If we're here, threadIdx.x == 0.
+        dev_partialMax[blockIdx.x] = sharedMem[0];
+	}
+
+
+    template<uint kernelType>
+    static void studentJob_testKernel(uint* const dev_array, uint const arraySize, const uint resCPU /* Just for comparison */) {
+        uint res = 0;
+        std::cout << "========== Ex " << (kernelType+1) << " " << std::endl;
+        float2 timing = reduce<kernelType>(dev_array, arraySize, res);
+        std::cout << " -> Done: ";
+        printTiming(timing);
+        compare(res, resCPU); // Compare results
+    }
 
 	void studentJob(const std::vector<uint> &array, const uint resCPU /* Just for comparison */)
     {
@@ -46,31 +108,13 @@ namespace IMAC
 		// Copy data from host to device
 		HANDLE_ERROR( cudaMemcpy( dev_array, array.data(), bytes, cudaMemcpyHostToDevice ) );
 
-		std::cout << "========== Ex 1 " << std::endl;
-		uint res1 = 0; // result
-		// Launch reduction and get timing
-		float2 timing1 = reduce<KERNEL_EX1>(dev_array, array.size(), res1);
-		
-        std::cout << " -> Done: ";
-        printTiming(timing1);
-		compare(res1, resCPU); // Compare results
+        studentJob_testKernel<KERNEL_EX1>(dev_array, array.size(), resCPU);
+        studentJob_testKernel<KERNEL_EX2>(dev_array, array.size(), resCPU);
+        studentJob_testKernel<KERNEL_EX3>(dev_array, array.size(), resCPU);
+        // TODO EX 4
+        // TODO EX 5
 
-		
-		std::cout << "========== Ex 2 " << std::endl;
-		/// TODO
-
-		std::cout << "========== Ex 3 " << std::endl;
-		/// TODO
-		
-		std::cout << "========== Ex 4 " << std::endl;
-		/// TODO
-		
-		std::cout << "========== Ex 5 " << std::endl;
-		/// TODO
-		
-
-		// Free array on GPU
-		cudaFree( dev_array );
+		cudaFree(dev_array);
     }
 
 	void printTiming(const float2 timing)
