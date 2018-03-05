@@ -67,47 +67,73 @@ namespace IMAC
         }
 
         const uint i = threadIdx.x;
-        for(uint stride = blockDim.x ; stride > 1 ; ) {
-            __syncthreads();
-            shm[i] = umax(shm[i], shm[i + stride]);
-
-            stride /= 2;
+        for(uint stride = blockDim.x ; stride > 1 ; stride /= 2) {
             if(i >= stride)
                 return; // NOTE: return, not break.
+            __syncthreads();
+            shm[i] = umax(shm[i], shm[i + stride]);
         }
         __syncthreads();
         dev_partialMax[blockIdx.x] = umax(shm[0], shm[1]);
 	}
 
     __global__ void maxReduce_ex4(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
-        extern __shared__ volatile uint vshm[];
+        extern __shared__ uint shm[];
 
         // See maxReduce_ex3
         for(uint step=0 ; step<=1 ; ++step) {
             const uint shm_i = threadIdx.x + step * blockDim.x;
             const uint dev_i = blockIdx.x * 2 * blockDim.x + shm_i;
-            vshm[shm_i] = (dev_i < size) * dev_array[dev_i];
+            shm[shm_i] = (dev_i < size) * dev_array[dev_i];
         }
 
         const uint i = threadIdx.x;
-        for(uint stride = blockDim.x ; stride > 32 ; ) {
-            __syncthreads();
-            vshm[i] = umax(vshm[i], vshm[i + stride]);
-
-            stride /= 2;
+        for(uint stride = blockDim.x ; stride > 32 ; stride /= 2) {
             if(i >= stride)
                 return; // NOTE: return, not break.
+            __syncthreads();
+            shm[i] = umax(shm[i], shm[i + stride]);
         }
         __syncthreads();
-                     vshm[i] = umax(vshm[i], vshm[i+32]);
-        if(i < 16) { vshm[i] = umax(vshm[i], vshm[i+16]);
-        if(i <  8) { vshm[i] = umax(vshm[i], vshm[i+8]);
-        if(i <  4) { vshm[i] = umax(vshm[i], vshm[i+4]);
-        if(i <  2) { vshm[i] = umax(vshm[i], vshm[i+2]);
-        if(i == 0) dev_partialMax[blockIdx.x] = umax(vshm[i], vshm[i+1]);
-        }}}}
+        volatile uint* const vshm = shm;
+        // XXX: Does it need __threadfence_block() ?
+        // See slide 20 of http://www.irisa.fr/alf/downloads/collange/cours/gpuprog_ufmg_2015/gpu_ufmg_2015_5.pdf
+        vshm[i] = umax(vshm[i], vshm[i+32]);
+        vshm[i] = umax(vshm[i], vshm[i+16]);
+        vshm[i] = umax(vshm[i], vshm[i+8]); 
+        vshm[i] = umax(vshm[i], vshm[i+4]); 
+        vshm[i] = umax(vshm[i], vshm[i+2]); 
+        if(i == 0)
+            dev_partialMax[blockIdx.x] = umax(vshm[0], vshm[1]);
 	}
 
+    __global__ void maxReduce_ex5(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
+        extern __shared__ uint shm[];
+
+        const uint shm_i = threadIdx.x * 2;
+        const uint dev_i = blockIdx.x * 2048 + shm_i;
+        shm[shm_i  ] = (dev_i   < size) * dev_array[dev_i  ];
+        shm[shm_i+1] = (dev_i+1 < size) * dev_array[dev_i+1];
+        __syncthreads();
+
+        const uint i = threadIdx.x;
+        shm[i] = umax(shm[i], shm[i+1024]); __syncthreads();
+        shm[i] = umax(shm[i], shm[i+ 512]); __syncthreads();
+        shm[i] = umax(shm[i], shm[i+ 256]); __syncthreads();
+        shm[i] = umax(shm[i], shm[i+ 128]); __syncthreads();
+        shm[i] = umax(shm[i], shm[i+  64]); __syncthreads();
+
+        volatile uint* const vshm = shm;
+        // XXX: Does it need __threadfence_block() ?
+        // See slide 20 of http://www.irisa.fr/alf/downloads/collange/cours/gpuprog_ufmg_2015/gpu_ufmg_2015_5.pdf
+        vshm[i] = umax(vshm[i], vshm[i+32]);
+        vshm[i] = umax(vshm[i], vshm[i+16]);
+        vshm[i] = umax(vshm[i], vshm[i+8]); 
+        vshm[i] = umax(vshm[i], vshm[i+4]); 
+        vshm[i] = umax(vshm[i], vshm[i+2]); 
+        if(i == 0)
+            dev_partialMax[blockIdx.x] = umax(vshm[0], vshm[1]);
+	}
 
     template<uint kernelType>
     static void studentJob_testKernel(uint* const dev_array, uint const arraySize, const uint resCPU /* Just for comparison */) {
@@ -133,7 +159,7 @@ namespace IMAC
         studentJob_testKernel<KERNEL_EX2>(dev_array, array.size(), resCPU);
         studentJob_testKernel<KERNEL_EX3>(dev_array, array.size(), resCPU);
         studentJob_testKernel<KERNEL_EX4>(dev_array, array.size(), resCPU);
-        // TODO EX 5
+        studentJob_testKernel<KERNEL_EX5>(dev_array, array.size(), resCPU);
 
 		cudaFree(dev_array);
     }

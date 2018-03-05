@@ -46,23 +46,15 @@ namespace IMAC
 		switch(kernelType)
 		{
 			case KERNEL_EX1:
-				dimBlockGrid.x = MAX_NB_THREADS; 
-				dimBlockGrid.y = (sizeArray + dimBlockGrid.x - 1) / dimBlockGrid.x;
-			break;
 			case KERNEL_EX2:
 				dimBlockGrid.x = MAX_NB_THREADS; 
 				dimBlockGrid.y = (sizeArray + dimBlockGrid.x - 1) / dimBlockGrid.x;
 			break;
 			case KERNEL_EX3:
-                dimBlockGrid.x = MAX_NB_THREADS; 
-				dimBlockGrid.y = (sizeArray + 2*dimBlockGrid.x - 1) / (2*dimBlockGrid.x);
-			break;
 			case KERNEL_EX4:
+			case KERNEL_EX5:
                 dimBlockGrid.x = MAX_NB_THREADS; 
 				dimBlockGrid.y = (sizeArray + 2*dimBlockGrid.x - 1) / (2*dimBlockGrid.x);
-			break;
-			case KERNEL_EX5:
-				/// TODO EX 5
 			break;
             default:
                 throw std::runtime_error("Error configureKernel: unknown kernel type");
@@ -108,7 +100,7 @@ namespace IMAC
 					maxReduce_ex4<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*2*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
 				case KERNEL_EX5:
-					/// TODO EX 5
+					maxReduce_ex5<<<dimBlockGrid.y, dimBlockGrid.x, dimBlockGrid.x*2*sizeof(uint)>>>(dev_array, size, dev_partialMax);
 				break;
                 default:
 		            cudaFree(dev_partialMax);
