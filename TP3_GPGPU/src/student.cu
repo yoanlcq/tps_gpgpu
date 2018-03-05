@@ -11,90 +11,75 @@
 
 namespace IMAC
 {
-	// ==================================================== Ex 0
+    extern __shared__ uint shm[];
+
     // Q2: Ca se foire parce qu'il n'y a pas assez de blocks et threads pour couvrir tout le tableau.
     // Spécifiquement, dans notre cas, on était à 1024*65535 = 67107840. Or, 2^26 = 67108864.
     __global__ void maxReduce_ex1(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
-        extern __shared__ uint shm[];
-
         const uint dev_i = blockIdx.x * blockDim.x + threadIdx.x;
         shm[threadIdx.x] = (dev_i < size) * dev_array[dev_i];
+        __syncthreads();
 
         for(uint stride=1 ; ; stride *= 2) {
             const uint i = threadIdx.x * 2 * stride;
             const uint j = i + stride;
             if(j >= blockDim.x)
                 break;
-            __syncthreads();
             shm[i] = umax(shm[i], shm[j]);
+            __syncthreads();
         }
 
-        __syncthreads();
         if(threadIdx.x == 0)
             dev_partialMax[blockIdx.x] = shm[0];
 	}
 
     __global__ void maxReduce_ex2(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
-        extern __shared__ uint shm[];
-
         const uint dev_i = blockIdx.x * blockDim.x + threadIdx.x;
         shm[threadIdx.x] = (dev_i < size) * dev_array[dev_i];
+        __syncthreads();
 
         const uint i = threadIdx.x;
-        for(uint stride = blockDim.x/2 ; stride > 0 ; stride /= 2) {
+        for(uint stride = blockDim.x / 2 ; stride > 0 ; stride /= 2) {
             if(i >= stride)
                 return; // NOTE: return, not break.
-            __syncthreads();
             shm[i] = umax(shm[i], shm[i + stride]);
+            __syncthreads();
         }
-
-        __syncthreads();
-        // If we're here, threadIdx.x == 0.
         dev_partialMax[blockIdx.x] = shm[0];
 	}
 
     __global__ void maxReduce_ex3(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
-        extern __shared__ uint shm[];
-
-        // If 1 block = 1024 threads, then shm has 2048 elements here.
-        // Each block processes 2048 elements, and each thread has 2 load/stores to perform: Tidx and Tidx+1024.
-        // At step 0, elements from 0 to 1024 are stored in shm.
-        // At step 1, elements from 1024 to 2048 are stored in shm.
-        for(uint step=0 ; step<=1 ; ++step) {
-            const uint shm_i = threadIdx.x + step * blockDim.x;
-            const uint dev_i = blockIdx.x * 2 * blockDim.x + shm_i;
-            shm[shm_i] = (dev_i < size) * dev_array[dev_i];
-        }
+        const uint shm_i = threadIdx.x * 2;
+        const uint dev_i = blockIdx.x * 2 * blockDim.x + shm_i;
+        shm[shm_i  ] = (dev_i   < size) * dev_array[dev_i  ];
+        shm[shm_i+1] = (dev_i+1 < size) * dev_array[dev_i+1];
+        __syncthreads();
 
         const uint i = threadIdx.x;
-        for(uint stride = blockDim.x ; stride > 1 ; stride /= 2) {
+        for(uint stride = blockDim.x ; stride > 0 ; stride /= 2) {
             if(i >= stride)
                 return; // NOTE: return, not break.
-            __syncthreads();
             shm[i] = umax(shm[i], shm[i + stride]);
+            __syncthreads();
         }
-        __syncthreads();
-        dev_partialMax[blockIdx.x] = umax(shm[0], shm[1]);
+        dev_partialMax[blockIdx.x] = shm[0];
 	}
 
     __global__ void maxReduce_ex4(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
-        extern __shared__ uint shm[];
-
-        // See maxReduce_ex3
-        for(uint step=0 ; step<=1 ; ++step) {
-            const uint shm_i = threadIdx.x + step * blockDim.x;
-            const uint dev_i = blockIdx.x * 2 * blockDim.x + shm_i;
-            shm[shm_i] = (dev_i < size) * dev_array[dev_i];
-        }
+        const uint shm_i = threadIdx.x * 2;
+        const uint dev_i = blockIdx.x * 2 * blockDim.x + shm_i;
+        shm[shm_i  ] = (dev_i   < size) * dev_array[dev_i  ];
+        shm[shm_i+1] = (dev_i+1 < size) * dev_array[dev_i+1];
+        __syncthreads();
 
         const uint i = threadIdx.x;
         for(uint stride = blockDim.x ; stride > 32 ; stride /= 2) {
             if(i >= stride)
                 return; // NOTE: return, not break.
-            __syncthreads();
             shm[i] = umax(shm[i], shm[i + stride]);
+            __syncthreads();
         }
-        __syncthreads();
+        // NOTE: At this point we have 64 threads running in this block, half of which are useless.
         volatile uint* const vshm = shm;
         // XXX: Does it need __threadfence_block() ?
         // See slide 20 of http://www.irisa.fr/alf/downloads/collange/cours/gpuprog_ufmg_2015/gpu_ufmg_2015_5.pdf
@@ -108,8 +93,7 @@ namespace IMAC
 	}
 
     __global__ void maxReduce_ex5(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
-        extern __shared__ uint shm[];
-
+        // NOTE: This kernel explicitly assumes 1024 threads.
         const uint shm_i = threadIdx.x * 2;
         const uint dev_i = blockIdx.x * 2048 + shm_i;
         shm[shm_i  ] = (dev_i   < size) * dev_array[dev_i  ];
