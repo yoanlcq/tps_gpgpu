@@ -20,6 +20,7 @@ namespace IMAC
 {
 	const uint MAX_NB_THREADS = 1024; // En dur, changer si GPU plus ancien ;-)
     const uint DEFAULT_NB_BLOCKS = 65535;
+    // NOTE: max grid size = dim3(2147483647, 65535, 65535)
 
     enum
     {
@@ -43,7 +44,7 @@ namespace IMAC
 		{
 			case KERNEL_EX1:
 				dimBlockGrid.x = MAX_NB_THREADS; 
-				dimBlockGrid.y = DEFAULT_NB_BLOCKS;
+				dimBlockGrid.y = (sizeArray + dimBlockGrid.x - 1) / dimBlockGrid.x;
 			break;
 			case KERNEL_EX2:
 				/// TODO EX 2

@@ -13,34 +13,27 @@ namespace IMAC
 {
 	// ==================================================== Ex 0
     // Q2: Ca se foire parce qu'il n'y a pas assez de blocks et threads pour couvrir tout le tableau.
+    // Spécifiquement, dans notre cas, on était à 1024*65535 = 67107840. Or, 2^26 = 67108864.
     __global__ void maxReduce_ex1(const uint *const dev_array, const uint size, uint *const dev_partialMax) {
         extern __shared__ uint sharedMem[];
 
-        for(uint bi=0 ; ; bi += gridDim.x) {
+        const uint dev_i = blockIdx.x * blockDim.x + threadIdx.x;
+        if(dev_i >= size)
+            return;
+        sharedMem[threadIdx.x] = dev_array[dev_i];
+        __syncthreads();
 
-            const uint dev_i = (bi+blockIdx.x) * blockDim.x + threadIdx.x;
-            if(dev_i >= size)
-                return;
-            sharedMem[threadIdx.x] = dev_array[dev_i];
+        for(uint stride=1 ;  ; stride *= 2) {
+            const uint i = threadIdx.x * 2 * stride;
+            const uint j = i + stride;
+            if(j >= blockDim.x)
+                break;
+            sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
             __syncthreads();
-
-            for(uint stride=1 ;  ; stride *= 2) {
-                const uint i = threadIdx.x * 2 * stride;
-                const uint j = i + stride;
-                const uint dev_i = i + (bi+blockIdx.x) * blockDim.x;
-                const uint dev_j = j + (bi+blockIdx.x) * blockDim.x;
-                // TODO: Some of these checks are redundant
-                if(i >= blockDim.x || j >= blockDim.x)
-                    break;
-                if(dev_i >= size || dev_j >= size)
-                    break;
-                sharedMem[i] = umax(sharedMem[i], sharedMem[j]);
-                __syncthreads();
-            }
-
-            if(threadIdx.x == 0)
-                dev_partialMax[bi+blockIdx.x] = sharedMem[0];
         }
+
+        if(threadIdx.x == 0)
+            dev_partialMax[blockIdx.x] = sharedMem[0];
 	}
 
 	void studentJob(const std::vector<uint> &array, const uint resCPU /* Just for comparison */)
