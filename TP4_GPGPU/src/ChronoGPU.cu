@@ -4,13 +4,13 @@
 */
 
 #include <ChronoGPU.hpp>
-#include <common.hpp>
+#include <handle_cuda_error.hpp>
 #include <iostream>
 
 ChronoGPU::ChronoGPU() 
 	: m_started( false ) {
-	HANDLE_ERROR( cudaEventCreate( &m_start ) );
-	HANDLE_ERROR( cudaEventCreate( &m_end ) );
+	handle_cuda_error( cudaEventCreate( &m_start ) );
+	handle_cuda_error( cudaEventCreate( &m_end ) );
 }
 
 ChronoGPU::~ChronoGPU() {
@@ -18,13 +18,13 @@ ChronoGPU::~ChronoGPU() {
 		stop();
 		std::cerr << "ChronoGPU::~ChronoGPU(): chrono wasn't turned off!" << std::endl; 
 	}
-	HANDLE_ERROR( cudaEventDestroy( m_start ) );
-	HANDLE_ERROR( cudaEventDestroy( m_end ) );
+	handle_cuda_error( cudaEventDestroy( m_start ) );
+	handle_cuda_error( cudaEventDestroy( m_end ) );
 }
 
 void ChronoGPU::start() {
 	if ( !m_started ) {
-		HANDLE_ERROR( cudaEventRecord( m_start, 0 ) );
+		handle_cuda_error( cudaEventRecord( m_start, 0 ) );
 		m_started = true;
 	}
 	else
@@ -33,8 +33,8 @@ void ChronoGPU::start() {
 
 void ChronoGPU::stop() {
 	if ( m_started ) {
-		HANDLE_ERROR( cudaEventRecord( m_end, 0 ) );
-		HANDLE_ERROR( cudaEventSynchronize( m_end ) );
+		handle_cuda_error( cudaEventRecord( m_end, 0 ) );
+		handle_cuda_error( cudaEventSynchronize( m_end ) );
 		m_started = false;
 	}
 	else
@@ -43,6 +43,6 @@ void ChronoGPU::stop() {
 
 float ChronoGPU::elapsedTime() { 
 	float time = 0.f;
-	HANDLE_ERROR( cudaEventElapsedTime( &time, m_start, m_end ) );
+	handle_cuda_error( cudaEventElapsedTime( &time, m_start, m_end ) );
 	return time;
 }

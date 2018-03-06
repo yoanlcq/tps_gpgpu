@@ -1,10 +1,10 @@
 bin := tone_map
 
 cxx := g++
-cxx_flags := -Wall -O3
+cxx_flags := -Wall -g -D_GNU_SOURCE
 
 nvcc := nvcc
-nvcc_flags := -gencode=arch=compute_50,code=sm_50 -ccbin $(cxx)
+nvcc_flags := -gencode=arch=compute_50,code=sm_50 -ccbin $(cxx) -g -D_GNU_SOURCE
 
 inc  := -I./include -I/usr/local/cuda/include
 libs := -lcuda -lcudart
@@ -16,7 +16,10 @@ cu_ofiles  := $(patsubst src/%.cu,obj/%.cu.o,$(cufiles))
 
 .PHONY: all clean re mrproper
 
-all: $(cu_ofiles) $(cpp_ofiles)
+all: $(bin)
+	
+
+$(bin): $(cu_ofiles) $(cpp_ofiles)
 	$(nvcc) $(nvcc_flags) -o $(bin) $^ $(libs)
 
 obj/%.cu.o: src/%.cu
