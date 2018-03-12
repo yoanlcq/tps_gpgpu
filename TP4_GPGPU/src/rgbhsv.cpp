@@ -7,6 +7,21 @@ Rgb24::Rgb24(uint8_t r, uint8_t g, uint8_t b): r(r), g(g), b(b) {}
 Rgb3f::Rgb3f(float r, float g, float b): r(r), g(g), b(b) {}
 Hsv::Hsv(float h, float s, float v): h(h), s(s), v(v) {}
 
+Rgb24::Rgb24(const Rgb3f& c):
+    r(c.r * 255),
+    g(c.g * 255),
+    b(c.b * 255)
+{}
+Rgb3f::Rgb3f(const Rgb24& c):
+    r(c.r / 255.f),
+    g(c.g / 255.f),
+    b(c.b / 255.f)
+{}
+
+Hsv::Hsv(const Rgb24& rgb): Hsv(Rgb3f(rgb)) {}
+Rgb24::Rgb24(const Hsv& hsv): Rgb24(Rgb3f(hsv)) {}
+
+
 Rgb3f::Rgb3f(const Hsv& hsv) {
     const float h = hsv.h, s = hsv.s, v = hsv.v;
     const float hp = h / 60;
@@ -40,7 +55,7 @@ Hsv::Hsv(const Rgb3f& rgb) {
         return;
     }
 
-    s = cmax > EPSILON ? 0 : delta / cmax;
+    s = cmax <= EPSILON ? 0 : delta / cmax;
 
          if(r >= cmax) h = 0 + (g-b) / delta;
     else if(g >= cmax) h = 2 + (b-r) / delta;

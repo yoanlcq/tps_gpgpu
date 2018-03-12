@@ -7,17 +7,6 @@
 #include <vector>
 #include <rgbhsv.hpp>
 
-typedef ScopedChrono<ChronoCPU> ScopedChronoCPU;
-
-static void HSVtoRGB(float& r, float& g, float& b, const float& h, const float& s, const float& v) {
-    Rgb3f rgb(Hsv(h, s, v));
-    r = rgb.r, g = rgb.g, b = rgb.b;
-}
-static void RGBtoHSV(const float& r, const float& g, const float& b, float& h, float& s, float& v) {
-    Hsv hsv(Rgb3f(r, g, b));
-    h = hsv.h, s = hsv.s, v = hsv.v;
-}
-
 static const uint32_t L = 256;
 
 static void tone_map_cpu(
@@ -48,41 +37,32 @@ static void rgb_to_hsv_cpu(
     float* __restrict__ hue,
     float* __restrict__ sat,
     float* __restrict__ val,
-    const uint8_t* __restrict__ rgb, 
+    const Rgb24* __restrict__ rgb, 
     uint32_t w, uint32_t h
 ) {
     for(uint32_t i=0 ; i<w*h ; ++i) {
-        float r, g, b, h, s, v;
-        r = rgb[3*i+0] / 255.f;
-        g = rgb[3*i+1] / 255.f;
-        b = rgb[3*i+2] / 255.f;
-        RGBtoHSV(r, g, b, h, s, v);
-        hue[i] = h;
-        sat[i] = s;
-        val[i] = v;
+        Hsv hsv = Hsv(rgb[i]);
+        hue[i] = hsv.h;
+        sat[i] = hsv.s;
+        val[i] = hsv.v;
     }
 }
 
 static void hsv_to_rgb_cpu(
-    uint8_t* __restrict__ rgb,
+    Rgb24* __restrict__ rgb,
     const float* __restrict__ hue,
     const float* __restrict__ sat,
     const float* __restrict__ val,
     uint32_t w, uint32_t h
 ) {
     for(uint32_t i=0 ; i<w*h ; ++i) {
-        float r, g, b, h, s, v;
-        h = hue[i];
-        s = sat[i];
-        v = val[i];
-        HSVtoRGB(r, g, b, h, s, v);
-        rgb[3*i+0] = r * 255.f;
-        rgb[3*i+1] = g * 255.f;
-        rgb[3*i+2] = b * 255.f;
+        rgb[i] = Rgb24(Hsv(hue[i], sat[i], val[i]));
     }
 }
 
-void tone_map_cpu_rgb(uint8_t* __restrict__ dst, const uint8_t* __restrict__ src, uint32_t w, uint32_t h) {
+typedef ScopedChrono<ChronoCPU> ScopedChronoCPU;
+
+void tone_map_cpu_rgb(Rgb24* __restrict__ dst, const Rgb24* __restrict__ src, uint32_t w, uint32_t h) {
     unsigned total_bytes = 4*w*h*sizeof(float);
     printf("CPU: Allocating %u bytes (~%u MiB)\n", total_bytes, total_bytes / (1024 * 1024));
     std::vector<float> hue(w*h), sat(w*h), src_val(w*h), dst_val(w*h);

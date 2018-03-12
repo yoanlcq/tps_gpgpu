@@ -32,8 +32,8 @@ int main(int argc, char *argv[]) {
 
     std::vector<uint8_t> img_cpu(3*w*h);
     std::vector<uint8_t> img_gpu(3*w*h);
-    tone_map_cpu_rgb(img_cpu.data(), img.data(), w, h);
-    tone_map_gpu_rgb(img_gpu.data(), img.data(), w, h);
+    tone_map_cpu_rgb((Rgb24*) img_cpu.data(), (Rgb24*) img.data(), w, h);
+    tone_map_gpu_rgb((Rgb24*) img_gpu.data(), (Rgb24*) img.data(), w, h);
 
     const char *extension = 1 + strchr(path, '.');
     char* name = strndup(path, extension - 1 - path);

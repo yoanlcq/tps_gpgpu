@@ -1,7 +1,7 @@
 bin := tone_map
 
 cxx := g++
-cxx_flags := -Wall -g -D_GNU_SOURCE
+cxx_flags := -Wall -g -D_GNU_SOURCE -std=gnu++11
 
 nvcc := nvcc
 nvcc_flags := -gencode=arch=compute_50,code=sm_50 -ccbin $(cxx) -g -D_GNU_SOURCE
