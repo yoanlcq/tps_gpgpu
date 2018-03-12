@@ -1,13 +1,15 @@
 #include <tone_map.hpp>
 #include <ChronoCPU.hpp>
 #include <ScopedChrono.hpp>
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <vector>
 #include <rgbhsv.hpp>
 
-static const uint32_t L = 256;
+#include <stdint.h>
+#include <stdio.h>
+#include <vector>
+
+const uint32_t TONEMAP_LEVELS = 256;
+
+#define L TONEMAP_LEVELS
 
 static void tone_map_cpu(
     float* __restrict__ dst,
