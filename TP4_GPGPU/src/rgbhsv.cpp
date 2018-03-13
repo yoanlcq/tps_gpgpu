@@ -43,26 +43,27 @@ Rgb3f::Rgb3f(const Hsv& hsv) {
 Hsv::Hsv(const Rgb3f& rgb) {
     using namespace std;
     const float r = rgb.r, g = rgb.g, b = rgb.b;
-    float cmax = max(max(r, g), b);
-    float cmin = min(min(r, g), b);
-    float delta = cmax - cmin;
+    const float cmax = max(max(r, g), b);
+    const float cmin = min(min(r, g), b);
+    const float delta = cmax - cmin;
     v = cmax;
 
     static const float EPSILON = 0.0001f;
     
-    if(delta <= EPSILON) {
+    if(delta <= EPSILON || cmax <= EPSILON) {
         h = 0, s = 0;
         return;
     }
 
-    s = cmax <= EPSILON ? 0 : delta / cmax;
+    s = delta / cmax;
 
          if(r >= cmax) h = 0 + (g-b) / delta;
     else if(g >= cmax) h = 2 + (b-r) / delta;
     else               h = 4 + (r-g) / delta;
 
-    h *= 60;
     if(h < 0)
-        h += 360;
+        h += 6;
+
+    h *= 60;
 }
 
