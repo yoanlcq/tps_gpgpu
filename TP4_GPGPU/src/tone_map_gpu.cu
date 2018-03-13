@@ -103,17 +103,42 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
         (h + n_threads.y - 1) / n_threads.y
     );
 
+    // STEPS:
+    // malloc-memset hist;
+    //
+    // per-pixel: RGB -> HSV
+    // per-pixel: atomicInc(&hist[pixel])
+    // inclusive scan: for l in 0..L: cdf[l] = ...
+    // per-pixel: dst_val[i] = tone_map(src_val[i]);
+    // per-pixel: HSV -> RGB
+
+    // tex: src_rgb
+    // buf: dev_hue
+    // buf: dev_sat
+    // buf: dev_src_val
+    // buf: dev_dst_val
+
+    // i: src_tex_rgb
+    // o: dev_hue
+    // o: dev_sat
+    // o: dev_src_val
     rgb_to_hsv_gpu<<<n_blocks, n_threads>>>(
         dev_hue, dev_hue_pitch,
         dev_sat, dev_sat_pitch,
         dev_src_val, dev_src_val_pitch,
         w, h
     );
+    // i: dev_src_val
+    // o: dev_dst_val
     tone_map_gpu<<<n_blocks, n_threads>>>(
         dev_dst_val, dev_dst_val_pitch,
         dev_src_val, dev_src_val_pitch,
         w, h
     );
+    // i: dev_hue
+    // i: dev_sat
+    // i: dev_dst_val
+    // o: dev_dst_rgb
     hsv_to_rgb_gpu<<<n_blocks, n_threads>>>(
         dev_dst, dev_dst_pitch,
         dev_hue, dev_hue_pitch,
