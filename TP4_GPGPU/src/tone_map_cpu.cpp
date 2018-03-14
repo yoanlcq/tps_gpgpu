@@ -18,7 +18,8 @@ static void tone_map_cpu(
 ) {
     uint32_t hist[L] = {};
     for(uint32_t i = 0 ; i < w*h ; ++i) {
-        hist[(uint32_t) (src[i] * (L-1))] += 1;
+        uint32_t l = src[i] * (L-1);
+        hist[l] += 1;
     }
 
     uint32_t cdf[L]; // Cumulative Distribution Function
@@ -26,12 +27,11 @@ static void tone_map_cpu(
     for(uint32_t l = 0 ; l < L ; ++l) {
         sum += hist[l];
         cdf[l] = sum;
-        // printf("cdf[%u] = %u\n", l, cdf[l]);
     }
 
     for(uint32_t i = 0 ; i < w*h ; ++i) {
-        dst[i] = (cdf[(uint32_t) (src[i] * (L-1))] - cdf[0]) / float(w*h-1);
-        // printf("dst[%u] = %f\n", i, dst[i]);
+        uint32_t l = src[i] * (L-1);
+        dst[i] = (cdf[l] - cdf[0]) / float(w*h);
     }
 }
 

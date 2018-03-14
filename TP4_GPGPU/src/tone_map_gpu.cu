@@ -1,5 +1,6 @@
 #include <tone_map.hpp>
 #include <rgbhsv.hpp>
+#include <handle_cuda_error.hpp>
 #include <ChronoGPU.hpp>
 #include <ScopedChrono.hpp>
 
@@ -13,53 +14,86 @@
 #include <device_launch_parameters.h>
 #include <math_functions.h>
 
+// TODO today:
+// - GPU: Once it works:
+//   - Use a texture;
+//   - Use constant or shared memory;
+// - GPU-CPU: Compare images (hue, sat, val, and rgb)
 
 #define L TONEMAP_LEVELS
 
-__global__ static void tone_map_gpu(
-          float* __restrict__ dev_dst, uint32_t dev_dst_pitch,
-    const float* __restrict__ dev_src, uint32_t dev_src_pitch,
-    uint32_t w, uint32_t h
-) {
-    for(uint y = blockIdx.y * blockDim.y + threadIdx.y ; y < h ; y += gridDim.y * blockDim.y) {
-        for(uint x = blockIdx.x * blockDim.x + threadIdx.x ; x < w ; x += gridDim.x * blockDim.x) {
-            // TODO
-        }
-    }
-}
+__global__ static void rgb_to_hsv_then_put_in_histogram(
+    uint32_t* dev_hist, float* dev_hue, float* dev_sat, float* dev_val,
+    const uchar3* dev_rgb, uint32_t w, uint32_t h
+) {}
+__global__ static void generate_cdf_via_inclusive_scan_histogram(
+    uint32_t* dev_cdf, const uint32_t* dev_hist
+) {}
+__global__ static void tone_map_then_hsv_to_rgb(
+    uchar3* dev_rgb,
+    const float* dev_hue, const float* dev_sat, const float* dev_val, 
+    uint32_t w, uint32_t h, const uint32_t* dev_cdf
+) {}
 
-static texture<uchar3, cudaTextureType2D, cudaReadModeElementType> dev_src_tex;
-
-// NOTE: The input parameter is actually dev_src_tex
-__global__ static void rgb_to_hsv_gpu(
-    float* __restrict__ dev_hue, uint32_t dev_hue_pitch,
-    float* __restrict__ dev_sat, uint32_t dev_sat_pitch,
-    float* __restrict__ dev_val, uint32_t dev_val_pitch,
-    uint32_t w, uint32_t h
-) {
-    for(uint y = blockIdx.y * blockDim.y + threadIdx.y ; y < h ; y += gridDim.y * blockDim.y) {
-        for(uint x = blockIdx.x * blockDim.x + threadIdx.x ; x < w ; x += gridDim.x * blockDim.x) {
-            // TODO: fetch from dev_src_tex
-        }
-    }
-}
-
-__global__ static void hsv_to_rgb_gpu(
-         uchar3* __restrict__ dev_rgb, uint32_t dev_rgb_pitch,
-    const float* __restrict__ dev_hue, uint32_t dev_hue_pitch,
-    const float* __restrict__ dev_sat, uint32_t dev_sat_pitch,
-    const float* __restrict__ dev_val, uint32_t dev_val_pitch,
-    uint32_t w, uint32_t h
-) {
-    for(uint y = blockIdx.y * blockDim.y + threadIdx.y ; y < h ; y += gridDim.y * blockDim.y) {
-        for(uint x = blockIdx.x * blockDim.x + threadIdx.x ; x < w ; x += gridDim.x * blockDim.x) {
-            // TODO
-        }
-    }
-}
 
 typedef ScopedChrono<ChronoGPU> ScopedChronoGPU;
 
+void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ host_src, uint32_t w, uint32_t h) {
+
+    uchar3* dev_rgb = NULL;
+    float* dev_hue = NULL;
+    float* dev_sat = NULL;
+    float* dev_val = NULL;
+
+    uint32_t* dev_hist = NULL;
+    uint32_t* dev_cdf = NULL;
+
+    handle_cuda_error(cudaMalloc(&dev_rgb, w * h * sizeof dev_rgb[0]));
+    handle_cuda_error(cudaMalloc(&dev_hue, w * h * sizeof dev_hue[0]));
+    handle_cuda_error(cudaMalloc(&dev_sat, w * h * sizeof dev_sat[0]));
+    handle_cuda_error(cudaMalloc(&dev_val, w * h * sizeof dev_val[0]));
+    handle_cuda_error(cudaMalloc(&dev_hist, L * sizeof dev_hist[0]));
+    handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
+    handle_cuda_error(cudaMalloc(&dev_cdf, L * sizeof dev_cdf[0]));
+
+    assert(sizeof(host_src[0]) == sizeof(dev_rgb[0]));
+    handle_cuda_error(cudaMemcpy(dev_rgb, host_src, w * h * sizeof dev_rgb[0], cudaMemcpyHostToDevice));
+
+    // 16*16 = 256 threads/tile
+    // 32*32 = 1024 threads/tile
+    const dim3 img_threads(32, 32);
+    const dim3 img_blocks(
+        (w + img_threads.x - 1) / img_threads.x,
+        (h + img_threads.y - 1) / img_threads.y
+    );
+    const uint32_t level_threads = 1024;
+    const uint32_t level_blocks = (L + level_threads - 1) / level_threads;
+
+    rgb_to_hsv_then_put_in_histogram<<<img_blocks, img_threads>>>(
+        dev_hist, dev_hue, dev_sat, dev_val, dev_rgb, w, h
+    );
+    generate_cdf_via_inclusive_scan_histogram<<<level_blocks, level_threads>>>(
+        dev_cdf, dev_hist
+    );
+    tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(
+        dev_rgb, dev_hue, dev_sat, dev_val, w, h, dev_cdf
+    );
+    // Kernel 1: Per-pixel, RGB -> HSV and atomicInc(&hist[pixel]);
+    // Kernel 2: Per-level, Generate cdf from hist using inclusive scan
+    // Kernel 3: Per-pixel, val[i] = tone_map(val[i]); then HSV -> RGB.
+
+    assert(sizeof(host_dst[0]) == sizeof(dev_rgb[0]));
+    handle_cuda_error(cudaMemcpy(host_dst, dev_rgb, w * h * sizeof dev_rgb[0], cudaMemcpyDeviceToHost));
+
+    handle_cuda_error(cudaFree(dev_rgb));
+    handle_cuda_error(cudaFree(dev_hue));
+    handle_cuda_error(cudaFree(dev_sat));
+    handle_cuda_error(cudaFree(dev_val));
+    handle_cuda_error(cudaFree(dev_hist));
+    handle_cuda_error(cudaFree(dev_cdf));
+}
+
+#if 0
 void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ host_src, uint32_t w, uint32_t h) {
 
     assert(sizeof(Rgb24) == sizeof(uchar3));
@@ -159,3 +193,4 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
 
     // TODO compare images (host_dst and dst_cpu)
 }
+#endif
