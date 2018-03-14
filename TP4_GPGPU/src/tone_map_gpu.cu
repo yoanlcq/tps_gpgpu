@@ -16,11 +16,10 @@
 
 // TODO 
 // - GPU: Profiler et sauver les résultats pour le rapport !
-// - GPU: Inclusive scan
-// - GPU: réduire les atomicAdd(), utiliser de la shared memory à la place.
 // - GPU: Once it works:
 //   - Use a texture;
 //   - Use constant or shared memory;
+//   - Minimize atomicAdd()s;
 
 #define L TONEMAP_LEVELS
 
@@ -73,20 +72,38 @@ __global__ static void rgb_to_hsv_then_put_in_histogram(
     atomicAdd(&dev_hist[l], 1);
 }
 
+// CDF = Cumulative Distribution Function
 __global__ static void generate_cdf_via_inclusive_scan_histogram(
           uint32_t* const __restrict__ dev_cdf, 
     const uint32_t* const __restrict__ dev_hist
 ) {
-    // FIXME!! Make it an inclusive scan instead!
+    // Slide 20 of
+    // http://people.cs.vt.edu/yongcao/teaching/cs5234/spring2013/slides/Lecture10.pdf
 
-    if(!(blockIdx.x == 0 && threadIdx.x == 0))
-        return;
+    // Assume L/2 threads, and only 1 block
+    __shared__ uint32_t shared_cdf[L];
+    shared_cdf[threadIdx.x*2 + 0] = dev_hist[threadIdx.x*2 + 0];
+    shared_cdf[threadIdx.x*2 + 1] = dev_hist[threadIdx.x*2 + 1];
+    __syncthreads();
 
-    uint32_t sum = 0;
-    for(uint32_t l = 0 ; l < L ; ++l) {
-        sum += dev_hist[l];
-        dev_cdf[l] = sum;
+    // Reduction step
+    for(uint32_t stride=1 ; stride <= L/2 ; stride *= 2) {
+        const uint32_t i = (threadIdx.x+1) * stride * 2 - 1;
+        if(i < L) {
+            shared_cdf[i] += shared_cdf[i - stride];
+        }
+        __syncthreads();
     }
+    // Post scan step
+    for(int32_t stride=L/4 ; stride > 0 ; stride /= 2) {
+        const uint32_t i = (threadIdx.x+1) * stride * 2 - 1;
+        if(i + stride < L) {
+            shared_cdf[i + stride] += shared_cdf[i];
+        }
+        __syncthreads();
+    }
+    dev_cdf[threadIdx.x*2 + 0] = shared_cdf[threadIdx.x*2 + 0];
+    dev_cdf[threadIdx.x*2 + 1] = shared_cdf[threadIdx.x*2 + 1];
 }
 
 __global__ static void tone_map_then_hsv_to_rgb(
@@ -133,7 +150,7 @@ typedef ScopedChrono<ChronoGPU> ScopedChronoGPU;
 
 void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ host_src, uint32_t w, uint32_t h) {
 
-    // Vérifier que l'architecture du code est compatible avec ce PC. Ca m'avait mordu.
+    // Vérifier que l'architecture du code est compatible avec ce PC. Ca m'avait silencieusement trahi.
     sanity_check_kernel<<<1,1>>>();
     handle_cuda_error(cudaGetLastError());
 
@@ -156,8 +173,9 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
         handle_cuda_error(cudaMalloc(&dev_sat, w * h * sizeof dev_sat[0]));
         handle_cuda_error(cudaMalloc(&dev_val, w * h * sizeof dev_val[0]));
         handle_cuda_error(cudaMalloc(&dev_hist, L * sizeof dev_hist[0]));
-        handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
         handle_cuda_error(cudaMalloc(&dev_cdf, L * sizeof dev_cdf[0]));
+
+        handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
     }
 
     {
@@ -173,8 +191,6 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
         (w + img_threads.x - 1) / img_threads.x,
         (h + img_threads.y - 1) / img_threads.y
     );
-    const uint32_t level_threads = 1024;
-    const uint32_t level_blocks = (L + level_threads - 1) / level_threads;
 
 #ifdef NDEBUG
 #define check_kernel_error()
@@ -183,7 +199,7 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
 #endif
 
     {
-        ScopedChronoGPU chr("GPU: RGB to HSV & incrementing histogram slots");
+        ScopedChronoGPU chr("GPU: RGB to HSV, then incrementing histogram slots");
         rgb_to_hsv_then_put_in_histogram<<<img_blocks, img_threads>>>(
             dev_hist, dev_hue, dev_sat, dev_val, dev_rgb, w, h
         );
@@ -192,14 +208,14 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
 
     {
         ScopedChronoGPU chr("GPU: Generating CDF via inclusive scan of histogram");
-        generate_cdf_via_inclusive_scan_histogram<<<level_blocks, level_threads>>>(
+        generate_cdf_via_inclusive_scan_histogram<<<1, L/2>>>(
             dev_cdf, dev_hist
         );
     }
     check_kernel_error();
 
     {
-        ScopedChronoGPU chr("GPU: Tone mapping & HSV to RGB");
+        ScopedChronoGPU chr("GPU: Tone mapping, then HSV to RGB");
         tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(
             dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h
         );
