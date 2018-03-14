@@ -23,17 +23,99 @@
 #define L TONEMAP_LEVELS
 
 __global__ static void rgb_to_hsv_then_put_in_histogram(
-    uint32_t* dev_hist, float* dev_hue, float* dev_sat, float* dev_val,
-    const uchar3* dev_rgb, uint32_t w, uint32_t h
-) {}
+          uint32_t* const __restrict__ dev_hist,
+          float*    const __restrict__ dev_hue,
+          float*    const __restrict__ dev_sat,
+          float*    const __restrict__ dev_val,
+    const uchar3*   const __restrict__ dev_rgb,
+    const uint32_t w, const uint32_t h
+) {
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    const uint32_t i = y * w + x;
+
+    if(x >= w || y >= h)
+        return;
+
+    const uchar3 rgb = dev_rgb[i];
+    const float r = rgb.x / 255.f;
+    const float g = rgb.y / 255.f;
+    const float b = rgb.z / 255.f;
+    const float cmax = fmaxf(fmaxf(r, g), b);
+    const float cmin = fminf(fminf(r, g), b);
+    const float delta = cmax - cmin;
+    static const float EPSILON = 0.0001f;
+
+    if(delta <= EPSILON || cmax <= EPSILON) {
+        dev_hue[i] = 0.f;
+        dev_sat[i] = 0.f;
+    } else {
+        float hue = 0.f;
+
+             if(r >= cmax) hue = 0 + (g-b) / delta;
+        else if(g >= cmax) hue = 2 + (b-r) / delta;
+        else               hue = 4 + (r-g) / delta;
+
+        if(hue < 0)
+            hue += 6;
+
+        hue *= 60;
+        dev_hue[i] = hue;
+        dev_sat[i] = delta / cmax;
+    }
+
+    const float val = cmax;
+    dev_val[i] = val;
+
+    const uint32_t l = val * 255;
+    atomicAdd(&dev_hist[l], 1);
+}
+
 __global__ static void generate_cdf_via_inclusive_scan_histogram(
-    uint32_t* dev_cdf, const uint32_t* dev_hist
-) {}
+          uint32_t* const __restrict__ dev_cdf, 
+    const uint32_t* const __restrict__ dev_hist
+) {
+    // TODO: generate cdf
+}
+
 __global__ static void tone_map_then_hsv_to_rgb(
-    uchar3* dev_rgb,
-    const float* dev_hue, const float* dev_sat, const float* dev_val, 
-    uint32_t w, uint32_t h, const uint32_t* dev_cdf
-) {}
+         uchar3*    const __restrict__ dev_rgb,
+    const float*    const __restrict__ dev_hue,
+    const float*    const __restrict__ dev_sat,
+    const float*    const __restrict__ dev_val, 
+    const uint32_t* const __restrict__ dev_cdf,
+    const uint32_t w, const uint32_t h
+) {
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    const uint32_t i = y * w + x;
+
+    if(x >= w || y >= h)
+        return;
+
+    // TODO tone_map here
+
+    const float hue = dev_hue[i];
+    const float sat = dev_sat[i];
+    const float val = dev_val[i];
+
+    const float hp = hue / 60;
+    const float c = val * sat; // chroma
+    const float X = c * (1 - fabsf(fmodf(hp, 2) - 1));
+    float r, g, b;
+    switch((int)hp) {
+    case 0: r = c, g = X, b = 0; break;
+    case 1: r = X, g = c, b = 0; break;
+    case 2: r = 0, g = c, b = X; break;
+    case 3: r = 0, g = X, b = c; break;
+    case 4: r = X, g = 0, b = c; break;
+    case 5: r = c, g = 0, b = X; break;
+    default: r = g = b = 0; break;
+    }
+    const float m = val - c;
+    r += m, g += m, b += m;
+    dev_rgb[i] = make_uchar3(r * 255, g * 255, b * 255);
+}
 
 
 typedef ScopedChrono<ChronoGPU> ScopedChronoGPU;
@@ -76,11 +158,8 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
         dev_cdf, dev_hist
     );
     tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(
-        dev_rgb, dev_hue, dev_sat, dev_val, w, h, dev_cdf
+        dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h
     );
-    // Kernel 1: Per-pixel, RGB -> HSV and atomicInc(&hist[pixel]);
-    // Kernel 2: Per-level, Generate cdf from hist using inclusive scan
-    // Kernel 3: Per-pixel, val[i] = tone_map(val[i]); then HSV -> RGB.
 
     assert(sizeof(host_dst[0]) == sizeof(dev_rgb[0]));
     handle_cuda_error(cudaMemcpy(host_dst, dev_rgb, w * h * sizeof dev_rgb[0], cudaMemcpyDeviceToHost));
