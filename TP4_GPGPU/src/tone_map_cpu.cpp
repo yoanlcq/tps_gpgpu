@@ -7,8 +7,6 @@
 #include <stdio.h>
 #include <vector>
 
-const uint32_t TONEMAP_LEVELS = 256;
-
 #define L TONEMAP_LEVELS
 
 static void tone_map_cpu(
