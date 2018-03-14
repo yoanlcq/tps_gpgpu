@@ -14,11 +14,13 @@
 #include <device_launch_parameters.h>
 #include <math_functions.h>
 
-// TODO today:
+// TODO 
+// - GPU: Profiler et sauver les résultats pour le rapport !
+// - GPU: Inclusive scan
+// - GPU: réduire les atomicAdd(), utiliser de la shared memory à la place.
 // - GPU: Once it works:
 //   - Use a texture;
 //   - Use constant or shared memory;
-// - GPU-CPU: Compare images (hue, sat, val, and rgb)
 
 #define L TONEMAP_LEVELS
 
@@ -125,29 +127,44 @@ __global__ static void tone_map_then_hsv_to_rgb(
     dev_rgb[i] = make_uchar3(r * 255, g * 255, b * 255);
 }
 
+__global__ static void sanity_check_kernel() {}
 
 typedef ScopedChrono<ChronoGPU> ScopedChronoGPU;
 
 void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ host_src, uint32_t w, uint32_t h) {
 
-    uchar3* dev_rgb = NULL;
-    float* dev_hue = NULL;
-    float* dev_sat = NULL;
-    float* dev_val = NULL;
+    // Vérifier que l'architecture du code est compatible avec ce PC. Ca m'avait mordu.
+    sanity_check_kernel<<<1,1>>>();
+    handle_cuda_error(cudaGetLastError());
 
+    uchar3*   dev_rgb = NULL;
+    float*    dev_hue = NULL;
+    float*    dev_sat = NULL;
+    float*    dev_val = NULL;
     uint32_t* dev_hist = NULL;
     uint32_t* dev_cdf = NULL;
 
-    handle_cuda_error(cudaMalloc(&dev_rgb, w * h * sizeof dev_rgb[0]));
-    handle_cuda_error(cudaMalloc(&dev_hue, w * h * sizeof dev_hue[0]));
-    handle_cuda_error(cudaMalloc(&dev_sat, w * h * sizeof dev_sat[0]));
-    handle_cuda_error(cudaMalloc(&dev_val, w * h * sizeof dev_val[0]));
-    handle_cuda_error(cudaMalloc(&dev_hist, L * sizeof dev_hist[0]));
-    handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
-    handle_cuda_error(cudaMalloc(&dev_cdf, L * sizeof dev_cdf[0]));
+    {
+        char txt[128];
+        uint32_t total_bytes = w * h * (3+4+4+4) + L * (4+4);
+        snprintf(txt, sizeof txt, "GPU: Allocating %u bytes (~%u MiB)",
+            total_bytes, total_bytes / (1024 * 1024)
+        );
+        ScopedChronoGPU chr(txt);
+        handle_cuda_error(cudaMalloc(&dev_rgb, w * h * sizeof dev_rgb[0]));
+        handle_cuda_error(cudaMalloc(&dev_hue, w * h * sizeof dev_hue[0]));
+        handle_cuda_error(cudaMalloc(&dev_sat, w * h * sizeof dev_sat[0]));
+        handle_cuda_error(cudaMalloc(&dev_val, w * h * sizeof dev_val[0]));
+        handle_cuda_error(cudaMalloc(&dev_hist, L * sizeof dev_hist[0]));
+        handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
+        handle_cuda_error(cudaMalloc(&dev_cdf, L * sizeof dev_cdf[0]));
+    }
 
-    assert(sizeof(host_src[0]) == sizeof(dev_rgb[0]));
-    handle_cuda_error(cudaMemcpy(dev_rgb, host_src, w * h * sizeof dev_rgb[0], cudaMemcpyHostToDevice));
+    {
+        ScopedChronoGPU chr("GPU: Uploading RGB data");
+        assert(sizeof(host_src[0]) == sizeof(dev_rgb[0]));
+        handle_cuda_error(cudaMemcpy(dev_rgb, host_src, w * h * sizeof dev_rgb[0], cudaMemcpyHostToDevice));
+    }
 
     // 16*16 = 256 threads/tile
     // 32*32 = 1024 threads/tile
@@ -159,28 +176,54 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
     const uint32_t level_threads = 1024;
     const uint32_t level_blocks = (L + level_threads - 1) / level_threads;
 
-    rgb_to_hsv_then_put_in_histogram<<<img_blocks, img_threads>>>(
-        dev_hist, dev_hue, dev_sat, dev_val, dev_rgb, w, h
-    );
-    generate_cdf_via_inclusive_scan_histogram<<<level_blocks, level_threads>>>(
-        dev_cdf, dev_hist
-    );
-    tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(
-        dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h
-    );
+#ifdef NDEBUG
+#define check_kernel_error()
+#else
+#define check_kernel_error() handle_cuda_error(cudaGetLastError())
+#endif
 
-    assert(sizeof(host_dst[0]) == sizeof(dev_rgb[0]));
-    handle_cuda_error(cudaMemcpy(host_dst, dev_rgb, w * h * sizeof dev_rgb[0], cudaMemcpyDeviceToHost));
+    {
+        ScopedChronoGPU chr("GPU: RGB to HSV & incrementing histogram slots");
+        rgb_to_hsv_then_put_in_histogram<<<img_blocks, img_threads>>>(
+            dev_hist, dev_hue, dev_sat, dev_val, dev_rgb, w, h
+        );
+    }
+    check_kernel_error();
 
-    handle_cuda_error(cudaFree(dev_rgb));
-    handle_cuda_error(cudaFree(dev_hue));
-    handle_cuda_error(cudaFree(dev_sat));
-    handle_cuda_error(cudaFree(dev_val));
-    handle_cuda_error(cudaFree(dev_hist));
-    handle_cuda_error(cudaFree(dev_cdf));
+    {
+        ScopedChronoGPU chr("GPU: Generating CDF via inclusive scan of histogram");
+        generate_cdf_via_inclusive_scan_histogram<<<level_blocks, level_threads>>>(
+            dev_cdf, dev_hist
+        );
+    }
+    check_kernel_error();
+
+    {
+        ScopedChronoGPU chr("GPU: Tone mapping & HSV to RGB");
+        tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(
+            dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h
+        );
+    }
+    check_kernel_error();
+
+    {
+        ScopedChronoGPU chr("GPU: Downloading RGB data");
+        assert(sizeof(host_dst[0]) == sizeof(dev_rgb[0]));
+        handle_cuda_error(cudaMemcpy(host_dst, dev_rgb, w * h * sizeof dev_rgb[0], cudaMemcpyDeviceToHost));
+    }
+
+    {
+        ScopedChronoGPU chr("GPU: Freeing memory");
+        handle_cuda_error(cudaFree(dev_rgb));
+        handle_cuda_error(cudaFree(dev_hue));
+        handle_cuda_error(cudaFree(dev_sat));
+        handle_cuda_error(cudaFree(dev_val));
+        handle_cuda_error(cudaFree(dev_hist));
+        handle_cuda_error(cudaFree(dev_cdf));
+    }
 }
 
-#if 0
+#if 0 // code de test
 void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ host_src, uint32_t w, uint32_t h) {
 
     assert(sizeof(Rgb24) == sizeof(uchar3));

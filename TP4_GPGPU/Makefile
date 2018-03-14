@@ -3,8 +3,11 @@ bin := tone_map
 cxx := g++
 cxx_flags := -Wall -g -D_GNU_SOURCE -std=gnu++11
 
+# NOTE: On my laptop, set to compute_20 and sm_20
+gpu_arch := compute_50
+gpu_code := sm_50
 nvcc := nvcc
-nvcc_flags := -gencode=arch=compute_50,code=sm_50 -ccbin $(cxx) -g -D_GNU_SOURCE
+nvcc_flags := --gpu-architecture=$(gpu_arch) --gpu-code=$(gpu_code) -ccbin $(cxx) -g -D_GNU_SOURCE
 
 inc  := -I./include -I/usr/local/cuda/include
 libs := -lcuda -lcudart
