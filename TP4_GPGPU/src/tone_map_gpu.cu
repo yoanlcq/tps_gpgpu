@@ -44,7 +44,7 @@ __global__ static void rgb_to_hsv_then_put_in_histogram(
     const float cmax = fmaxf(fmaxf(r, g), b);
     const float cmin = fminf(fminf(r, g), b);
     const float delta = cmax - cmin;
-    static const float EPSILON = 0.0001f;
+    const float EPSILON = 0.0001f;
 
     if(delta <= EPSILON || cmax <= EPSILON) {
         dev_hue[i] = 0.f;
