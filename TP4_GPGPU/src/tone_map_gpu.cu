@@ -75,7 +75,16 @@ __global__ static void generate_cdf_via_inclusive_scan_histogram(
           uint32_t* const __restrict__ dev_cdf, 
     const uint32_t* const __restrict__ dev_hist
 ) {
-    // TODO: generate cdf
+    // FIXME!! Make it an inclusive scan instead!
+
+    if(!(blockIdx.x == 0 && threadIdx.x == 0))
+        return;
+
+    uint32_t sum = 0;
+    for(uint32_t l = 0 ; l < L ; ++l) {
+        sum += dev_hist[l];
+        dev_cdf[l] = sum;
+    }
 }
 
 __global__ static void tone_map_then_hsv_to_rgb(
@@ -93,11 +102,10 @@ __global__ static void tone_map_then_hsv_to_rgb(
     if(x >= w || y >= h)
         return;
 
-    // TODO tone_map here
-
+    const uint32_t l = dev_val[i] * (L-1);
+    const float val = (dev_cdf[l] - dev_cdf[0]) / float(w*h);
     const float hue = dev_hue[i];
     const float sat = dev_sat[i];
-    const float val = dev_val[i];
 
     const float hp = hue / 60;
     const float c = val * sat; // chroma
