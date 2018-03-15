@@ -14,7 +14,6 @@ GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 3.481602 ms (200 times
 GPU: Downloading RGB data: 2.518048 ms
 GPU: Freeing memory: 0.411648 ms
 
-
 Compiled with arch=compute_50, code=sm_50
 Device: Quadro K620, CUDA 5.0
 Using image `images/Unequalized_Hawkes_Bay_NZ.png`, 1024x683 RGB
@@ -46,3 +45,52 @@ GPU: Tone mapping, then HSV to RGB (CDF in global mem): 0.221214 ms (200 times, 
 GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 0.208767 ms (200 times, 16x16 blocks of 32x32 threads)
 GPU: Downloading RGB data: 0.219456 ms
 GPU: Freeing memory: 0.386016 ms
+
+Compiled with arch=compute_20, code=sm_20
+Device: GeForce GT 635M, CUDA 2.1
+Using image `images/Chateau.png`, 2550x1917 RGB
+GPU: Allocating 92880698 bytes (~88 MiB): 0.713216 ms
+GPU: Uploading RGB data (1D, 3 components): 4.574208 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 5.834208 ms
+GPU: RGB to HSV (RGB in 2D texture): 11.139908 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 10.677858 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 14.999317 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 20.794110 ms (200 times, 4774x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.008361 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 10.284321 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 9.751174 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Downloading RGB data: 4.782656 ms
+GPU: Freeing memory: 0.560864 ms
+
+Compiled with arch=compute_20, code=sm_20
+Device: GeForce GT 635M, CUDA 2.1
+Using image `images/Unequalized_Hawkes_Bay_NZ.png`, 1024x683 RGB
+GPU: Allocating 13290496 bytes (~12 MiB): 0.674560 ms
+GPU: Uploading RGB data (1D, 3 components): 0.766656 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 0.852864 ms
+GPU: RGB to HSV (RGB in 2D texture): 1.790500 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 1.781730 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 1.482985 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 2.480159 ms (200 times, 683x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.008396 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 1.155794 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 1.178590 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Downloading RGB data: 0.802496 ms
+GPU: Freeing memory: 0.476544 ms
+
+Compiled with arch=compute_20, code=sm_20
+Device: GeForce GT 635M, CUDA 2.1
+Using image `images/Lena.png`, 512x512 RGB
+GPU: Allocating 4982784 bytes (~4 MiB): 0.945152 ms
+GPU: Uploading RGB data (1D, 3 components): 0.358048 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 0.376384 ms
+GPU: RGB to HSV (RGB in 2D texture): 0.730098 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 0.724311 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 0.540963 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 0.618014 ms (200 times, 256x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.008618 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 0.619960 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 0.647035 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Downloading RGB data: 0.356416 ms
+GPU: Freeing memory: 0.460480 ms
+
