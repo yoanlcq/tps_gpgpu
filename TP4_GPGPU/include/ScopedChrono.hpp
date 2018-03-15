@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string>
-#include <iostream>
+#include <stdio.h>
 
 template<typename Chrono>
 class ScopedChrono {
@@ -9,11 +9,12 @@ class ScopedChrono {
     ScopedChrono();
 public:
     ScopedChrono(const std::string& action) {
-		std::cout << action << ": " << std::flush;
+		printf("%s: ", action.c_str());
+        fflush(stdout);
 		m_Chrono.start();
     }
     ~ScopedChrono() {
 		m_Chrono.stop();
-		std::cout << m_Chrono.elapsedTime() << " ms" << std::endl;
+        printf("%f ms\n", m_Chrono.elapsedTime());
     }
 };

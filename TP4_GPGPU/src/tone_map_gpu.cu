@@ -21,13 +21,20 @@
 //   - Minimize atomicAdd()s by accumulating in local and shared memory;
 //   - Once filled, put dev_cdf into constant memory.
 
-// NOTE: scores:
-// GeForce GT 635M (Fermi architecture):
-// - rgb_to_hsv: 13 ms
-// - generate_histogram (simple, per-pixel atomicAdd() to global mem) : 18 ms
-// - generate_histogram (smarter, shared mem atomicAdd()) : 22 ms
-// - generate_cdf_via_inclusive_scan_histogram: 0.011 ms
-// - tone_map_then_hsv_to_rgb: 13.5 ms
+// NOTE: scores: Chateau.png:
+//
+// GeForce GT 635M (laptop, Fermi architecture):
+// GPU: Allocating 73327298 bytes (~69 MiB): 0.658176 ms
+// GPU: Uploading RGB data: 5.834688 ms
+// GPU: RGB to HSV: 11.987400 ms (average of 100 invocations)
+// GPU: Histogram with per-pixel global atomicAdd(): 14.994180 ms (average of 100 invocations)
+// GPU: Histogram with shared mem atomicAdd(): 20.790686 ms (average of 100 invocations)
+// GPU: Generate CDF via inclusive scan of histogram: 0.009258 ms (average of 100 invocations)
+// GPU: Tone map, then HSV to RGB: 11.447376 ms (average of 100 invocations)
+// GPU: Downloading RGB data: 4.783200 ms
+// GPU: Freeing memory: 0.439808 ms
+//
+
 
 #define L TONEMAP_LEVELS
 
@@ -74,12 +81,11 @@ __global__ static void rgb_to_hsv(
     dev_val[i] = cmax;
 }
 
-__global__ static void generate_histogram(
+__global__ static void generate_histogram_simple(
        uint32_t* const __restrict__ dev_hist, 
     const float* const __restrict__ dev_val,
     const uint32_t w, const uint32_t h
 ) {
-#ifdef HISTOGRAM_SIMPLE // Per-pixel.
     const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
     const uint32_t i = y * w + x;
@@ -88,9 +94,15 @@ __global__ static void generate_histogram(
         return;
 
     const uint32_t l = dev_val[i] * 255;
-    atomicAdd(&shared_hist[l], 1);
+    atomicAdd(&dev_hist[l], 1);
+}
 
-#else // A bit smarter. Uses shared mem atomics.
+
+__global__ static void generate_histogram_smarter(
+       uint32_t* const __restrict__ dev_hist, 
+    const float* const __restrict__ dev_val,
+    const uint32_t w, const uint32_t h
+) {
     __shared__ uint32_t shared_hist[L];
     for(uint32_t l = threadIdx.x ; l < L ; l += blockDim.x) {
         shared_hist[l] = 0;
@@ -104,7 +116,6 @@ __global__ static void generate_histogram(
     for(uint32_t l = threadIdx.x ; l < L ; l += blockDim.x) {
         atomicAdd(&dev_hist[l], shared_hist[l]);
     }
-#endif
 }
 
 
@@ -180,9 +191,170 @@ __global__ static void tone_map_then_hsv_to_rgb(
     dev_rgb[i] = make_uchar3(r * 255, g * 255, b * 255);
 }
 
-__global__ static void sanity_check_kernel() {}
-
 typedef ScopedChrono<ChronoGPU> ScopedChronoGPU;
+
+
+struct ToneMapGpu {
+    const uint32_t w, h;
+    const dim3 img_threads;
+    const dim3 img_blocks;
+
+    uchar3*   dev_rgb;
+    float*    dev_hue;
+    float*    dev_sat;
+    float*    dev_val;
+    uint32_t* dev_hist;
+    uint32_t* dev_cdf;
+
+    enum Kernel {
+        KERNEL_RGB_TO_HSV = 0,
+        KERNEL_HISTOGRAM_SIMPLE,
+        KERNEL_HISTOGRAM_SMARTER,
+        KERNEL_CDF_VIA_INCLUSIVE_SCAN,
+        KERNEL_TONE_MAP_THEN_HSV_TO_RGB,
+        KERNEL_COUNT,
+    };
+
+    ToneMapGpu(uint32_t w, uint32_t h);
+    ~ToneMapGpu();
+    void upload_rgb(const Rgb24* host_src);
+    void invoke_kernels(uint32_t nb_loops);
+    void download_rgb(Rgb24* host_dst) const;
+
+private:
+    template<Kernel> const char* get_kernel_name();
+    template<Kernel> void run_kernel_prerequisites();
+    template<Kernel> void do_invoke_kernel();
+    template<Kernel> void invoke_kernel(uint32_t nb_loops);
+
+    ToneMapGpu(const ToneMapGpu&);
+    ToneMapGpu& operator=(const ToneMapGpu&);
+};
+
+
+ToneMapGpu::ToneMapGpu(uint32_t w, uint32_t h):
+    w(w), 
+    h(h),
+    // 16*16 = 256 threads/tile
+    // 32*32 = 1024 threads/tile
+    img_threads(32, 32),
+    img_blocks(
+        (w + img_threads.x - 1) / img_threads.x,
+        (h + img_threads.y - 1) / img_threads.y
+    )
+{
+    char txt[128];
+    uint32_t total_bytes = w * h * (3+4+4+4) + L * (4+4);
+    snprintf(txt, sizeof txt, "GPU: Allocating %u bytes (~%u MiB)",
+        total_bytes, total_bytes / (1024 * 1024)
+    );
+
+    ScopedChronoGPU chr(txt);
+    handle_cuda_error(cudaMalloc(&dev_rgb, w * h * sizeof dev_rgb[0]));
+    handle_cuda_error(cudaMalloc(&dev_hue, w * h * sizeof dev_hue[0]));
+    handle_cuda_error(cudaMalloc(&dev_sat, w * h * sizeof dev_sat[0]));
+    handle_cuda_error(cudaMalloc(&dev_val, w * h * sizeof dev_val[0]));
+    handle_cuda_error(cudaMalloc(&dev_hist, L * sizeof dev_hist[0]));
+    handle_cuda_error(cudaMalloc(&dev_cdf, L * sizeof dev_cdf[0]));
+}
+
+void ToneMapGpu::upload_rgb(const Rgb24* host_src) {
+    ScopedChronoGPU chr("GPU: Uploading RGB data");
+    assert(sizeof(host_src[0]) == sizeof(dev_rgb[0]));
+    handle_cuda_error(cudaMemcpy(dev_rgb, host_src, w * h * sizeof dev_rgb[0], cudaMemcpyHostToDevice));
+}
+
+void ToneMapGpu::download_rgb(Rgb24* host_dst) const {
+    ScopedChronoGPU chr("GPU: Downloading RGB data");
+    assert(sizeof(host_dst[0]) == sizeof(dev_rgb[0]));
+    handle_cuda_error(cudaMemcpy(host_dst, dev_rgb, w * h * sizeof dev_rgb[0], cudaMemcpyDeviceToHost));
+}
+
+ToneMapGpu::~ToneMapGpu() {
+    ScopedChronoGPU chr("GPU: Freeing memory");
+    handle_cuda_error(cudaFree(dev_rgb));
+    handle_cuda_error(cudaFree(dev_hue));
+    handle_cuda_error(cudaFree(dev_sat));
+    handle_cuda_error(cudaFree(dev_val));
+    handle_cuda_error(cudaFree(dev_hist));
+    handle_cuda_error(cudaFree(dev_cdf));
+}
+
+template<ToneMapGpu::Kernel kernel>
+void ToneMapGpu::run_kernel_prerequisites() {
+    switch(kernel) {
+    case KERNEL_HISTOGRAM_SIMPLE:
+    case KERNEL_HISTOGRAM_SMARTER:
+        handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
+        break;
+    // Explicitly handle all other cases to remove warnings and be future-proof
+    case KERNEL_RGB_TO_HSV:
+    case KERNEL_CDF_VIA_INCLUSIVE_SCAN:
+    case KERNEL_TONE_MAP_THEN_HSV_TO_RGB:
+        break;
+    }
+}
+
+template<ToneMapGpu::Kernel kernel>
+const char* ToneMapGpu::get_kernel_name() {
+    switch(kernel) {
+    case KERNEL_RGB_TO_HSV: return "RGB to HSV";
+    case KERNEL_HISTOGRAM_SIMPLE: return "Histogram with per-pixel global atomicAdd()";
+    case KERNEL_HISTOGRAM_SMARTER: return "Histogram with shared mem atomicAdd()";
+    case KERNEL_CDF_VIA_INCLUSIVE_SCAN: return "Generate CDF via inclusive scan of histogram";
+    case KERNEL_TONE_MAP_THEN_HSV_TO_RGB: return "Tone map, then HSV to RGB";
+    }
+    return NULL;
+}
+
+template<ToneMapGpu::Kernel kernel>
+void ToneMapGpu::do_invoke_kernel() {
+    switch(kernel) {
+    case KERNEL_RGB_TO_HSV:
+        rgb_to_hsv<<<img_blocks, img_threads>>>(dev_hue, dev_sat, dev_val, dev_rgb, w, h);
+        break;
+    case KERNEL_HISTOGRAM_SIMPLE:
+        generate_histogram_simple<<<img_blocks, img_threads>>>(dev_hist, dev_val, w, h);
+        break;
+    case KERNEL_HISTOGRAM_SMARTER:
+        generate_histogram_smarter<<<(w*h + 1024 - 1) / 1024, 1024>>>(dev_hist, dev_val, w, h);
+        break;
+    case KERNEL_CDF_VIA_INCLUSIVE_SCAN:
+        generate_cdf_via_inclusive_scan_histogram<<<1, L/2>>>(dev_cdf, dev_hist);
+        break;
+    case KERNEL_TONE_MAP_THEN_HSV_TO_RGB:
+        tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h);
+        break;
+    }
+}
+
+template<ToneMapGpu::Kernel kernel>
+void ToneMapGpu::invoke_kernel(uint32_t nb_loops) {
+    ChronoGPU chr;
+    double time_accum = 0;
+    for(uint32_t i=0 ; i<nb_loops ; ++i) {
+        run_kernel_prerequisites<kernel>();
+        chr.start();
+        do_invoke_kernel<kernel>();
+        chr.stop();
+        handle_cuda_error(cudaGetLastError());
+        time_accum += chr.elapsedTime();
+    }
+    printf("GPU: %s: %lf ms (average of %u invocations)\n",
+        get_kernel_name<kernel>(), time_accum / nb_loops, nb_loops
+    );
+}
+
+void ToneMapGpu::invoke_kernels(uint32_t nb_loops) {
+    invoke_kernel<KERNEL_RGB_TO_HSV>(nb_loops);
+    invoke_kernel<KERNEL_HISTOGRAM_SIMPLE>(nb_loops);
+    invoke_kernel<KERNEL_HISTOGRAM_SMARTER>(nb_loops);
+    invoke_kernel<KERNEL_CDF_VIA_INCLUSIVE_SCAN>(nb_loops);
+    invoke_kernel<KERNEL_TONE_MAP_THEN_HSV_TO_RGB>(nb_loops);
+}
+
+
+__global__ static void sanity_check_kernel() {}
 
 void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ host_src, uint32_t w, uint32_t h) {
 
@@ -190,100 +362,13 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
     sanity_check_kernel<<<1,1>>>();
     handle_cuda_error(cudaGetLastError());
 
-    uchar3*   dev_rgb = NULL;
-    float*    dev_hue = NULL;
-    float*    dev_sat = NULL;
-    float*    dev_val = NULL;
-    uint32_t* dev_hist = NULL;
-    uint32_t* dev_cdf = NULL;
-
-    {
-        char txt[128];
-        uint32_t total_bytes = w * h * (3+4+4+4) + L * (4+4);
-        snprintf(txt, sizeof txt, "GPU: Allocating %u bytes (~%u MiB)",
-            total_bytes, total_bytes / (1024 * 1024)
-        );
-        ScopedChronoGPU chr(txt);
-        handle_cuda_error(cudaMalloc(&dev_rgb, w * h * sizeof dev_rgb[0]));
-        handle_cuda_error(cudaMalloc(&dev_hue, w * h * sizeof dev_hue[0]));
-        handle_cuda_error(cudaMalloc(&dev_sat, w * h * sizeof dev_sat[0]));
-        handle_cuda_error(cudaMalloc(&dev_val, w * h * sizeof dev_val[0]));
-        handle_cuda_error(cudaMalloc(&dev_hist, L * sizeof dev_hist[0]));
-        handle_cuda_error(cudaMalloc(&dev_cdf, L * sizeof dev_cdf[0]));
-
-        handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
-    }
-
-    {
-        ScopedChronoGPU chr("GPU: Uploading RGB data");
-        assert(sizeof(host_src[0]) == sizeof(dev_rgb[0]));
-        handle_cuda_error(cudaMemcpy(dev_rgb, host_src, w * h * sizeof dev_rgb[0], cudaMemcpyHostToDevice));
-    }
-
-    // 16*16 = 256 threads/tile
-    // 32*32 = 1024 threads/tile
-    const dim3 img_threads(32, 32);
-    const dim3 img_blocks(
-        (w + img_threads.x - 1) / img_threads.x,
-        (h + img_threads.y - 1) / img_threads.y
-    );
-
-#ifdef NDEBUG
-#define check_kernel_error()
-#else
-#define check_kernel_error() handle_cuda_error(cudaGetLastError())
-#endif
-
-    {
-        ScopedChronoGPU chr("GPU: RGB to HSV");
-        rgb_to_hsv<<<img_blocks, img_threads>>>(
-            dev_hue, dev_sat, dev_val, dev_rgb, w, h
-        );
-    }
-    check_kernel_error();
-
-    {
-        ScopedChronoGPU chr("GPU: Generating histogram");
-#ifdef HISTOGRAM_SIMPLE
-        generate_histogram<<<img_blocks, img_threads>>>(dev_hist, dev_val, w, h);
-#else
-        generate_histogram<<<(w*h + 1024 - 1) / 1024, 1024>>>(dev_hist, dev_val, w, h);
-#endif
-    }
-    check_kernel_error();
-
-    {
-        ScopedChronoGPU chr("GPU: Generating CDF via inclusive scan of histogram");
-        generate_cdf_via_inclusive_scan_histogram<<<1, L/2>>>(
-            dev_cdf, dev_hist
-        );
-    }
-    check_kernel_error();
-
-    {
-        ScopedChronoGPU chr("GPU: Tone mapping, then HSV to RGB");
-        tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(
-            dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h
-        );
-    }
-    check_kernel_error();
-
-    {
-        ScopedChronoGPU chr("GPU: Downloading RGB data");
-        assert(sizeof(host_dst[0]) == sizeof(dev_rgb[0]));
-        handle_cuda_error(cudaMemcpy(host_dst, dev_rgb, w * h * sizeof dev_rgb[0], cudaMemcpyDeviceToHost));
-    }
-
-    {
-        ScopedChronoGPU chr("GPU: Freeing memory");
-        handle_cuda_error(cudaFree(dev_rgb));
-        handle_cuda_error(cudaFree(dev_hue));
-        handle_cuda_error(cudaFree(dev_sat));
-        handle_cuda_error(cudaFree(dev_val));
-        handle_cuda_error(cudaFree(dev_hist));
-        handle_cuda_error(cudaFree(dev_cdf));
-    }
+    ToneMapGpu gpu(w, h);
+    gpu.upload_rgb(host_src);
+    gpu.invoke_kernels(100);
+    gpu.download_rgb(host_dst);
 }
+
+
 
 #if 0 // code de test
 void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ host_src, uint32_t w, uint32_t h) {

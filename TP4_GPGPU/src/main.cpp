@@ -5,12 +5,16 @@
 #include <string.h>
 #include <lodepng.h>
 #include <tone_map.hpp>
+#include <iostream> // sync_with_stdio()
 
 static void usage(FILE* f, const char* exe) {
     fprintf(f, "Usage: %s <image>\n", exe);
 }
 
 int main(int argc, char *argv[]) {
+
+    std::ios::sync_with_stdio(true);
+
     if(argc < 2) {
         usage(stderr, argv[0]);
         return EXIT_FAILURE;
