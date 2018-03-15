@@ -17,14 +17,21 @@
 // TODO 
 // - GPU: Profiler et sauver les résultats pour le rapport !
 // - GPU: Once it works:
-//   - Use a texture;
-//   - Use constant or shared memory;
-//   - Minimize atomicAdd()s;
+//   - Use a 2D texture for input dev_rgb (gain spatial locality?);
+//   - Minimize atomicAdd()s by accumulating in local and shared memory;
+//   - Once filled, put dev_cdf into constant memory.
+
+// NOTE: scores:
+// GeForce GT 635M (Fermi architecture):
+// - rgb_to_hsv: 13 ms
+// - generate_histogram (simple, per-pixel atomicAdd() to global mem) : 18 ms
+// - generate_histogram (smarter, shared mem atomicAdd()) : 22 ms
+// - generate_cdf_via_inclusive_scan_histogram: 0.011 ms
+// - tone_map_then_hsv_to_rgb: 13.5 ms
 
 #define L TONEMAP_LEVELS
 
-__global__ static void rgb_to_hsv_then_put_in_histogram(
-          uint32_t* const __restrict__ dev_hist,
+__global__ static void rgb_to_hsv(
           float*    const __restrict__ dev_hue,
           float*    const __restrict__ dev_sat,
           float*    const __restrict__ dev_val,
@@ -64,13 +71,42 @@ __global__ static void rgb_to_hsv_then_put_in_histogram(
         dev_hue[i] = hue;
         dev_sat[i] = delta / cmax;
     }
-
-    const float val = cmax;
-    dev_val[i] = val;
-
-    const uint32_t l = val * 255;
-    atomicAdd(&dev_hist[l], 1);
+    dev_val[i] = cmax;
 }
+
+__global__ static void generate_histogram(
+       uint32_t* const __restrict__ dev_hist, 
+    const float* const __restrict__ dev_val,
+    const uint32_t w, const uint32_t h
+) {
+#ifdef HISTOGRAM_SIMPLE // Per-pixel.
+    const uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    const uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    const uint32_t i = y * w + x;
+
+    if(x >= w || y >= h)
+        return;
+
+    const uint32_t l = dev_val[i] * 255;
+    atomicAdd(&shared_hist[l], 1);
+
+#else // A bit smarter. Uses shared mem atomics.
+    __shared__ uint32_t shared_hist[L];
+    for(uint32_t l = threadIdx.x ; l < L ; l += blockDim.x) {
+        shared_hist[l] = 0;
+    }
+    __syncthreads();
+    for(uint32_t i = blockIdx.x * blockDim.x + threadIdx.x ; i < w*h ; i += blockDim.x * gridDim.x) {
+        const uint32_t l = dev_val[i] * 255;
+        atomicAdd(&shared_hist[l], 1);
+    }
+    __syncthreads();
+    for(uint32_t l = threadIdx.x ; l < L ; l += blockDim.x) {
+        atomicAdd(&dev_hist[l], shared_hist[l]);
+    }
+#endif
+}
+
 
 // CDF = Cumulative Distribution Function
 __global__ static void generate_cdf_via_inclusive_scan_histogram(
@@ -199,10 +235,20 @@ void tone_map_gpu_rgb(Rgb24* __restrict__ host_dst, const Rgb24* __restrict__ ho
 #endif
 
     {
-        ScopedChronoGPU chr("GPU: RGB to HSV, then incrementing histogram slots");
-        rgb_to_hsv_then_put_in_histogram<<<img_blocks, img_threads>>>(
-            dev_hist, dev_hue, dev_sat, dev_val, dev_rgb, w, h
+        ScopedChronoGPU chr("GPU: RGB to HSV");
+        rgb_to_hsv<<<img_blocks, img_threads>>>(
+            dev_hue, dev_sat, dev_val, dev_rgb, w, h
         );
+    }
+    check_kernel_error();
+
+    {
+        ScopedChronoGPU chr("GPU: Generating histogram");
+#ifdef HISTOGRAM_SIMPLE
+        generate_histogram<<<img_blocks, img_threads>>>(dev_hist, dev_val, w, h);
+#else
+        generate_histogram<<<(w*h + 1024 - 1) / 1024, 1024>>>(dev_hist, dev_val, w, h);
+#endif
     }
     check_kernel_error();
 
