@@ -91,7 +91,7 @@ __global__ static void rgb_to_hsv(
     dev_val[i] = cmax;
 }
 
-__global__ static void generate_histogram_simple(
+__global__ static void generate_histogram_per_pixel_global_atomicadd(
        uint32_t* const __restrict__ dev_hist, 
     const float* const __restrict__ dev_val,
     const uint32_t w, const uint32_t h
@@ -108,7 +108,7 @@ __global__ static void generate_histogram_simple(
 }
 
 
-__global__ static void generate_histogram_smarter(
+__global__ static void generate_histogram_shared_mem_atomicadd(
        uint32_t* const __restrict__ dev_hist, 
     const float* const __restrict__ dev_val,
     const uint32_t w, const uint32_t h
@@ -204,6 +204,14 @@ __global__ static void tone_map_then_hsv_to_rgb(
 typedef ScopedChrono<ChronoGPU> ScopedChronoGPU;
 
 
+struct KernelLaunchSettings {
+    dim3 n_blocks, n_threads;
+    KernelLaunchSettings(dim3 n_blocks, dim3 n_threads):
+        n_blocks(n_blocks),
+        n_threads(n_threads)
+        {}
+};
+
 struct ToneMapGpu {
     const uint32_t w, h;
     const dim3 img_threads;
@@ -218,8 +226,8 @@ struct ToneMapGpu {
 
     enum Kernel {
         KERNEL_RGB_TO_HSV = 0,
-        KERNEL_HISTOGRAM_SIMPLE,
-        KERNEL_HISTOGRAM_SMARTER,
+        KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD,
+        KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD,
         KERNEL_CDF_VIA_INCLUSIVE_SCAN,
         KERNEL_TONE_MAP_THEN_HSV_TO_RGB,
         KERNEL_COUNT,
@@ -232,7 +240,8 @@ struct ToneMapGpu {
     void download_rgb(Rgb24* host_dst) const;
 
 private:
-    template<Kernel> const char* get_kernel_name();
+    template<Kernel> KernelLaunchSettings make_kernel_settings() const;
+    template<Kernel> static const char* get_kernel_name();
     template<Kernel> void run_kernel_prerequisites();
     template<Kernel> void do_invoke_kernel();
     template<Kernel> void invoke_kernel(uint32_t nb_loops);
@@ -293,8 +302,8 @@ ToneMapGpu::~ToneMapGpu() {
 template<ToneMapGpu::Kernel kernel>
 void ToneMapGpu::run_kernel_prerequisites() {
     switch(kernel) {
-    case KERNEL_HISTOGRAM_SIMPLE:
-    case KERNEL_HISTOGRAM_SMARTER:
+    case KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD:
+    case KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD:
         handle_cuda_error(cudaMemset(dev_hist, 0, L * sizeof dev_hist[0]));
         break;
     // Explicitly handle all other cases to remove warnings and be future-proof
@@ -309,31 +318,49 @@ template<ToneMapGpu::Kernel kernel>
 const char* ToneMapGpu::get_kernel_name() {
     switch(kernel) {
     case KERNEL_RGB_TO_HSV: return "RGB to HSV";
-    case KERNEL_HISTOGRAM_SIMPLE: return "Histogram with per-pixel global atomicAdd()";
-    case KERNEL_HISTOGRAM_SMARTER: return "Histogram with shared mem atomicAdd()";
-    case KERNEL_CDF_VIA_INCLUSIVE_SCAN: return "Generate CDF via inclusive scan of histogram";
-    case KERNEL_TONE_MAP_THEN_HSV_TO_RGB: return "Tone map, then HSV to RGB";
+    case KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD: return "Histogram with per-pixel global atomicAdd()";
+    case KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD: return "Histogram with shared mem atomicAdd()";
+    case KERNEL_CDF_VIA_INCLUSIVE_SCAN: return "CDF via inclusive scan of histogram";
+    case KERNEL_TONE_MAP_THEN_HSV_TO_RGB: return "Tone mapping, then HSV to RGB";
     }
     return NULL;
 }
 
 template<ToneMapGpu::Kernel kernel>
-void ToneMapGpu::do_invoke_kernel() {
+KernelLaunchSettings ToneMapGpu::make_kernel_settings() const {
     switch(kernel) {
     case KERNEL_RGB_TO_HSV:
-        rgb_to_hsv<<<img_blocks, img_threads>>>(dev_hue, dev_sat, dev_val, dev_rgb, w, h);
+    case KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD:
+    case KERNEL_TONE_MAP_THEN_HSV_TO_RGB:
+        return KernelLaunchSettings(img_blocks, img_threads);
+    case KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD:
+        return KernelLaunchSettings((w*h + 1024 - 1) / 1024, 1024);
+    case KERNEL_CDF_VIA_INCLUSIVE_SCAN:
+        return KernelLaunchSettings(1, L/2);
+    }
+    return KernelLaunchSettings(0,0);
+}
+
+template<ToneMapGpu::Kernel kernel>
+void ToneMapGpu::do_invoke_kernel() {
+    const KernelLaunchSettings s = make_kernel_settings<kernel>();
+    const dim3 nb = s.n_blocks, nt = s.n_threads;
+
+    switch(kernel) {
+    case KERNEL_RGB_TO_HSV:
+        rgb_to_hsv<<<nb, nt>>>(dev_hue, dev_sat, dev_val, dev_rgb, w, h);
         break;
-    case KERNEL_HISTOGRAM_SIMPLE:
-        generate_histogram_simple<<<img_blocks, img_threads>>>(dev_hist, dev_val, w, h);
+    case KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD:
+        generate_histogram_per_pixel_global_atomicadd<<<nb, nt>>>(dev_hist, dev_val, w, h);
         break;
-    case KERNEL_HISTOGRAM_SMARTER:
-        generate_histogram_smarter<<<(w*h + 1024 - 1) / 1024, 1024>>>(dev_hist, dev_val, w, h);
+    case KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD:
+        generate_histogram_shared_mem_atomicadd<<<nb, nt>>>(dev_hist, dev_val, w, h);
         break;
     case KERNEL_CDF_VIA_INCLUSIVE_SCAN:
-        generate_cdf_via_inclusive_scan_histogram<<<1, L/2>>>(dev_cdf, dev_hist);
+        generate_cdf_via_inclusive_scan_histogram<<<nb, nt>>>(dev_cdf, dev_hist);
         break;
     case KERNEL_TONE_MAP_THEN_HSV_TO_RGB:
-        tone_map_then_hsv_to_rgb<<<img_blocks, img_threads>>>(dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h);
+        tone_map_then_hsv_to_rgb<<<nb, nt>>>(dev_rgb, dev_hue, dev_sat, dev_val, dev_cdf, w, h);
         break;
     }
 }
@@ -350,15 +377,19 @@ void ToneMapGpu::invoke_kernel(uint32_t nb_loops) {
         handle_cuda_error(cudaGetLastError());
         time_accum += chr.elapsedTime();
     }
-    printf("GPU: %s: %lf ms (average of %u invocations)\n",
-        get_kernel_name<kernel>(), time_accum / nb_loops, nb_loops
+    const KernelLaunchSettings s = make_kernel_settings<kernel>();
+    const dim3 nb = s.n_blocks, nt = s.n_threads;
+    printf("GPU: %s: %lf ms (%u times, %ux%u blocks of %ux%u threads)\n",
+        get_kernel_name<kernel>(), time_accum / nb_loops, nb_loops,
+        nb.x, nb.y,
+        nt.x, nt.y
     );
 }
 
 void ToneMapGpu::invoke_kernels(uint32_t nb_loops) {
     invoke_kernel<KERNEL_RGB_TO_HSV>(nb_loops);
-    invoke_kernel<KERNEL_HISTOGRAM_SIMPLE>(nb_loops);
-    invoke_kernel<KERNEL_HISTOGRAM_SMARTER>(nb_loops);
+    invoke_kernel<KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD>(nb_loops);
+    invoke_kernel<KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD>(nb_loops);
     invoke_kernel<KERNEL_CDF_VIA_INCLUSIVE_SCAN>(nb_loops);
     invoke_kernel<KERNEL_TONE_MAP_THEN_HSV_TO_RGB>(nb_loops);
 }
