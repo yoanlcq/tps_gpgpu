@@ -21,9 +21,9 @@
 //   - Minimize atomicAdd()s by accumulating in local and shared memory;
 //   - Once filled, put dev_cdf into constant memory.
 
-// NOTE: scores: Chateau.png:
+// NOTE: scores pour image/Chateau.png:
 //
-// GeForce GT 635M (laptop, Fermi architecture):
+// GeForce GT 635M (laptop, Fermi architecture, arch=compute_20, code=sm_20):
 // GPU: Allocating 73327298 bytes (~69 MiB): 0.658176 ms
 // GPU: Uploading RGB data: 5.834688 ms
 // GPU: RGB to HSV: 11.987400 ms (average of 100 invocations)
@@ -34,6 +34,16 @@
 // GPU: Downloading RGB data: 4.783200 ms
 // GPU: Freeing memory: 0.439808 ms
 //
+// Quadro K620 (salle 0B002, Maxwell architecture, arch=compute_50, code=sm_50):
+// GPU: Allocating 73327298 bytes (~69 MiB): 0.441376 ms
+// GPU: Uploading RGB data: 2.450944 ms
+// GPU: RGB to HSV: 4.085881 ms (average of 100 invocations)
+// GPU: Histogram with per-pixel global atomicAdd(): 5.294244 ms (average of 100 invocations)
+// GPU: Histogram with shared mem atomicAdd(): 1.468803 ms (average of 100 invocations)
+// GPU: Generate CDF via inclusive scan of histogram: 0.007121 ms (average of 100 invocations)
+// GPU: Tone map, then HSV to RGB: 4.288925 ms (average of 100 invocations)
+// GPU: Downloading RGB data: 2.559008 ms
+// GPU: Freeing memory: 0.358400 ms
 
 
 #define L TONEMAP_LEVELS
