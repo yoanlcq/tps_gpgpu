@@ -10,13 +10,12 @@
 #define L TONEMAP_LEVELS
 
 static void tone_map_cpu(
-    float* __restrict__ dst,
-    const float* __restrict__ src,
+    float* __restrict__ val,
     uint32_t w, uint32_t h
 ) {
     uint32_t hist[L] = {};
     for(uint32_t i = 0 ; i < w*h ; ++i) {
-        uint32_t l = src[i] * (L-1);
+        uint32_t l = val[i] * (L-1);
         hist[l] += 1;
     }
 
@@ -28,8 +27,8 @@ static void tone_map_cpu(
     }
 
     for(uint32_t i = 0 ; i < w*h ; ++i) {
-        uint32_t l = src[i] * (L-1);
-        dst[i] = (cdf[l] - cdf[0]) / float(w*h);
+        uint32_t l = val[i] * (L-1);
+        val[i] = (cdf[l] - cdf[0]) / float(w*h);
     }
 }
 
@@ -63,19 +62,19 @@ static void hsv_to_rgb_cpu(
 typedef ScopedChrono<ChronoCPU> ScopedChronoCPU;
 
 void tone_map_cpu_rgb(Rgb24* __restrict__ dst, const Rgb24* __restrict__ src, uint32_t w, uint32_t h) {
-    unsigned total_bytes = 4*w*h*sizeof(float);
+    unsigned total_bytes = 3*w*h*sizeof(float);
     printf("CPU: Allocating %u bytes (~%u MiB)\n", total_bytes, total_bytes / (1024 * 1024));
-    std::vector<float> hue(w*h), sat(w*h), src_val(w*h), dst_val(w*h);
+    std::vector<float> hue(w*h), sat(w*h), val(w*h);
     {
         ScopedChronoCPU chr("CPU: RGB to HSV");
-        rgb_to_hsv_cpu(hue.data(), sat.data(), src_val.data(), src, w, h);
+        rgb_to_hsv_cpu(hue.data(), sat.data(), val.data(), src, w, h);
     }
     {
-        ScopedChronoCPU chr("CPU: Tone mapping");
-        tone_map_cpu(dst_val.data(), src_val.data(), w, h);
+        ScopedChronoCPU chr("CPU: Histogram, then CDF, then tone mapping");
+        tone_map_cpu(val.data(), w, h);
     }
     {
         ScopedChronoCPU chr("CPU: HSV to RGB");
-        hsv_to_rgb_cpu(dst, hue.data(), sat.data(), dst_val.data(), w, h);
+        hsv_to_rgb_cpu(dst, hue.data(), sat.data(), val.data(), w, h);
     }
 }

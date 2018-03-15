@@ -24,10 +24,9 @@ Rgb24::Rgb24(const Hsv& hsv): Rgb24(Rgb3f(hsv)) {}
 
 Rgb3f::Rgb3f(const Hsv& hsv) {
     const float h = hsv.h, s = hsv.s, v = hsv.v;
-    const float hp = h / 60;
     const float c = v * s; // chroma
-    const float x = c * (1 - fabsf(fmodf(hp, 2) - 1));
-    switch((int)hp) {
+    const float x = c * (1 - fabsf(fmodf(h, 2) - 1));
+    switch((int)h) {
     case 0: r = c, g = x, b = 0; break;
     case 1: r = x, g = c, b = 0; break;
     case 2: r = 0, g = c, b = x; break;
@@ -63,7 +62,5 @@ Hsv::Hsv(const Rgb3f& rgb) {
 
     if(h < 0)
         h += 6;
-
-    h *= 60;
 }
 

@@ -1,13 +1,19 @@
 bin := tone_map
 
 cxx := g++
-cxx_flags := -Wall -g -D_GNU_SOURCE -std=gnu++11
+cxx_flags := -Wall -O3 -D_GNU_SOURCE -std=gnu++11
 
 # NOTE: On my laptop, set to compute_20 and sm_20
 gpu_arch := compute_50
 gpu_code := sm_50
 nvcc := nvcc
-nvcc_flags := --gpu-architecture=$(gpu_arch) --gpu-code=$(gpu_code) -ccbin $(cxx) -g -D_GNU_SOURCE
+nvcc_flags := $(strip \
+	--gpu-architecture=$(gpu_arch) \
+	--gpu-code=$(gpu_code) \
+	-ccbin $(cxx) -O3 -D_GNU_SOURCE \
+	-DGPU_ARCH=\"$(gpu_arch)\" \
+	-DGPU_CODE=\"$(gpu_code)\" \
+)
 
 inc  := -I./include -I/usr/local/cuda/include
 libs := -lcuda -lcudart
@@ -21,7 +27,6 @@ cu_ofiles  := $(patsubst src/%.cu,obj/%.cu.o,$(cufiles))
 
 all: $(bin)
 	
-
 $(bin): $(cu_ofiles) $(cpp_ofiles)
 	$(nvcc) $(nvcc_flags) -o $(bin) $^ $(libs)
 

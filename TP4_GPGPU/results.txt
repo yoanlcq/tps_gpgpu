@@ -1,0 +1,48 @@
+Compiled with arch=compute_50, code=sm_50
+Device: Quadro K620, CUDA 5.0
+Using image `images/Chateau.png`, 2550x1917 RGB
+GPU: Allocating 92880698 bytes (~88 MiB): 0.536576 ms
+GPU: Uploading RGB data (1D, 3 components): 2.445344 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 3.228704 ms
+GPU: RGB to HSV (RGB in 2D texture): 3.729295 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 3.813473 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 5.233018 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 1.450710 ms (200 times, 4774x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.006714 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 3.716156 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 3.481602 ms (200 times, 80x60 blocks of 32x32 threads)
+GPU: Downloading RGB data: 2.518048 ms
+GPU: Freeing memory: 0.411648 ms
+
+
+Compiled with arch=compute_50, code=sm_50
+Device: Quadro K620, CUDA 5.0
+Using image `images/Unequalized_Hawkes_Bay_NZ.png`, 1024x683 RGB
+GPU: Allocating 13290496 bytes (~12 MiB): 0.534528 ms
+GPU: Uploading RGB data (1D, 3 components): 0.507968 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 0.507104 ms
+GPU: RGB to HSV (RGB in 2D texture): 0.614809 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 0.632824 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 0.592985 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 0.195026 ms (200 times, 683x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.006832 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 0.459780 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 0.434734 ms (200 times, 32x22 blocks of 32x32 threads)
+GPU: Downloading RGB data: 0.469248 ms
+GPU: Freeing memory: 0.377824 ms
+
+Compiled with arch=compute_50, code=sm_50
+Device: Quadro K620, CUDA 5.0
+Using image `images/Lena.png`, 512x512 RGB
+GPU: Allocating 4982784 bytes (~4 MiB): 0.492512 ms
+GPU: Uploading RGB data (1D, 3 components): 0.241664 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 0.009184 ms
+GPU: RGB to HSV (RGB in 2D texture): 0.211583 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 0.216113 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 0.182630 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 0.067028 ms (200 times, 256x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.006900 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 0.221214 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 0.208767 ms (200 times, 16x16 blocks of 32x32 threads)
+GPU: Downloading RGB data: 0.219456 ms
+GPU: Freeing memory: 0.386016 ms

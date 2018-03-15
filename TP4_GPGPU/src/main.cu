@@ -5,6 +5,7 @@
 #include <string.h>
 #include <lodepng.h>
 #include <tone_map.hpp>
+#include <handle_cuda_error.hpp>
 #include <iostream> // sync_with_stdio()
 
 static void usage(FILE* f, const char* exe) {
@@ -29,10 +30,17 @@ int main(int argc, char *argv[]) {
 
     unsigned err = lodepng::decode(img, w, h, path, lct);
     if(err) {
-        fprintf(stderr, "Error: loadpng::decode: %s\n", lodepng_error_text(err));
+        fprintf(stderr, "Error: lodepng::decode: %s\n", lodepng_error_text(err));
         return EXIT_FAILURE;
     }
-    printf("Image: %ux%u (%s)\n", w, h, lct_str);
+
+    printf("Compiled with arch=%s, code=%s\n", GPU_ARCH, GPU_CODE);
+    {
+        cudaDeviceProp props;
+        handle_cuda_error(cudaGetDeviceProperties(&props, 0));
+        printf("Device: %s, CUDA %u.%u\n", props.name, props.major, props.minor);
+    }
+    printf("Using image `%s`, %ux%u %s\n", path, w, h, lct_str);
 
     std::vector<uint8_t> img_cpu(3*w*h);
     std::vector<uint8_t> img_gpu(3*w*h);
@@ -49,17 +57,17 @@ int main(int argc, char *argv[]) {
 
     int exit_status = EXIT_SUCCESS;
 
-    printf("Saving image as: %s\n", path_cpu);
+    printf("Saving CPU tone-mapped image as: %s\n", path_cpu);
 	err = lodepng::encode(path_cpu, img_cpu.data(), w, h, lct);
     if(err) {
-        fprintf(stderr, "Error: loadpng::encode: %s\n", lodepng_error_text(err));
+        fprintf(stderr, "Error: lodepng::encode: %s\n", lodepng_error_text(err));
         exit_status = EXIT_FAILURE;
     }
 
-    printf("Saving image as: %s\n", path_gpu);
+    printf("Saving GPU tone-mapped image as: %s\n", path_gpu);
 	err = lodepng::encode(path_gpu, img_gpu.data(), w, h, lct);
     if(err) {
-        fprintf(stderr, "Error: loadpng::encode: %s\n", lodepng_error_text(err));
+        fprintf(stderr, "Error: lodepng::encode: %s\n", lodepng_error_text(err));
         exit_status = EXIT_FAILURE;
     }
 
