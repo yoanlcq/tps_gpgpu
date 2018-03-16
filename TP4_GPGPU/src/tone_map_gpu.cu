@@ -255,8 +255,8 @@ private:
     template<Kernel> KernelLaunchSettings get_kernel_settings() const;
     template<Kernel> static const char* get_kernel_name();
     template<Kernel> void reset_kernel_inputs_if_needed();
-    template<Kernel> void do_invoke_kernel();
-    template<Kernel> void invoke_kernel(uint32_t nb_loops);
+    template<Kernel> void invoke_kernel();
+    template<Kernel> void invoke_kernel_n_times(uint32_t nb_loops);
 
     ToneMapGpu(const ToneMapGpu&);
     ToneMapGpu& operator=(const ToneMapGpu&);
@@ -366,7 +366,7 @@ KernelLaunchSettings ToneMapGpu::get_kernel_settings() const {
 }
 
 template<ToneMapGpu::Kernel kernel>
-void ToneMapGpu::do_invoke_kernel() {
+void ToneMapGpu::invoke_kernel() {
     const KernelLaunchSettings settings = get_kernel_settings<kernel>();
     const dim3 nb = settings.n_blocks;
     const dim3 nt = settings.n_threads;
@@ -418,13 +418,13 @@ void ToneMapGpu::reset_kernel_inputs_if_needed() {
 
 
 template<ToneMapGpu::Kernel kernel>
-void ToneMapGpu::invoke_kernel(uint32_t nb_loops) {
+void ToneMapGpu::invoke_kernel_n_times(uint32_t nb_loops) {
     ChronoGPU chr;
     double time_accum = 0;
     for(uint32_t i=0 ; i<nb_loops ; ++i) {
         reset_kernel_inputs_if_needed<kernel>();
         chr.start();
-        do_invoke_kernel<kernel>();
+        invoke_kernel<kernel>();
         chr.stop();
         handle_cuda_error(cudaGetLastError());
         time_accum += chr.elapsedTime();
@@ -447,19 +447,19 @@ void ToneMapGpu::perform_tone_map(uint32_t nb_loops) {
     // XXX Putting NULL as 1st argument isn't supposed to work, because memory was obtained by cudaMallocPitch().
     // Handling this would require too much refactoring for what it's worth.
     handle_cuda_error(cudaBindTexture2D(NULL, tex_rgb4, dev_rgb4, w, h, dev_rgb4_pitch));
-    invoke_kernel<KERNEL_RGB_TO_HSV__RGB_IN_TEXTURE_2D>(nb_loops);
+    invoke_kernel_n_times<KERNEL_RGB_TO_HSV__RGB_IN_TEXTURE_2D>(nb_loops);
     handle_cuda_error(cudaUnbindTexture(tex_rgb4));
 
-    invoke_kernel<KERNEL_RGB_TO_HSV__RGB_IN_GLOBAL_MEM>(nb_loops);
+    invoke_kernel_n_times<KERNEL_RGB_TO_HSV__RGB_IN_GLOBAL_MEM>(nb_loops);
 
-    invoke_kernel<KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD>(nb_loops);
-    invoke_kernel<KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD>(nb_loops);
+    invoke_kernel_n_times<KERNEL_HISTOGRAM_PER_PIXEL_GLOBAL_ATOMICADD>(nb_loops);
+    invoke_kernel_n_times<KERNEL_HISTOGRAM_SHARED_MEM_ATOMICADD>(nb_loops);
 
-    invoke_kernel<KERNEL_CDF_VIA_INCLUSIVE_SCAN>(nb_loops);
+    invoke_kernel_n_times<KERNEL_CDF_VIA_INCLUSIVE_SCAN>(nb_loops);
     handle_cuda_error(cudaMemcpyToSymbol(cst_cdf, dev_cdf, L * sizeof cst_cdf[0], 0, cudaMemcpyDeviceToDevice));
 
-    invoke_kernel<KERNEL_TONE_MAP_THEN_HSV_TO_RGB__CDF_IN_GLOBAL_MEM>(nb_loops);
-    invoke_kernel<KERNEL_TONE_MAP_THEN_HSV_TO_RGB__CDF_IN_CONSTANT_MEM>(nb_loops);
+    invoke_kernel_n_times<KERNEL_TONE_MAP_THEN_HSV_TO_RGB__CDF_IN_GLOBAL_MEM>(nb_loops);
+    invoke_kernel_n_times<KERNEL_TONE_MAP_THEN_HSV_TO_RGB__CDF_IN_CONSTANT_MEM>(nb_loops);
 }
 
 
