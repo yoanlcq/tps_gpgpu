@@ -61,9 +61,7 @@ Le pipeline est le suivant :
 
 5. Kernel "Histogram via per-pixel global atomicAdd()"
    1 thread par pixel fait un `atomicAdd()` sur l'histogramme en mémoire
-   principale. C'est l'approche la plus simple et naïve, mais étonnamment,
-   elle se comporte mieux que l'approche de l'étape suivante, sur les anciens
-   GPUs; et sur les GPUs récents, c'est l'inverse !
+   principale. C'est l'approche la plus simple et naïve.
 
 6. Kernel "Histogram using shared mem atomicAdd()"
    Chaque block accumule un histogramme en mémoire partagée avec des
@@ -71,23 +69,25 @@ Le pipeline est le suivant :
    des `atomicAdd()`.
    Cette approche n'est pas non plus très sophistiquée, mais je ne souhaite pas
    plonger plus loin dans la complexité.
-   Les "shared memory atomics" sont recommendés pour les architectures à
-   partir de Maxwell.
+   Les "shared memory atomics" sont recommendés pour les générations
+   Maxwell et plus récentes.
 
 7. Kernel "CDF via inclusive scan of histogram"
    Tout est dans le nom: ce kernel calcule la Cumulative Distribution Function
-   par un inclusive scan sur l'histogramme en mémoire globale.
+   par un inclusive scan sur l'histogramme en mémoire principale.
    Il n'y a qu'un seul block, et L/2 = 128 threads.
    L'histogramme est d'abord copié en mémoire partagée, d'où il est
    traité (conceptuellement) comme un arbre binaire balancé.
    Il y a deux phases : Réduction (downsweep) et upsweep.
-   Le code est basé sur le schéma de la slide 20 de la présentation suivante :
+   Le code est basé sur le schéma (et, pour ne rien cacher, le code d'exemple) 
+   de la slide 20 de la présentation suivante :
    http://people.cs.vt.edu/yongcao/teaching/cs5234/spring2013/slides/Lecture10.pdf
 
    Il n'y a pas de variante de ce kernel qui place l'histogramme en mémoire
    constante, parce qu'il n'y a pas de bénéfice à en tirer: chaque élément
    de l'histogramme n'est initialement lu qu'une et une seule fois, et il y a
-   de toute façon besoin d'accumuler des résultats quelque part.
+   de toute façon besoin d'accumuler des résultats quelque part où l'on peut
+   écrire.
 
 8. Kernel "Tone mapping, then HSV to RGB (CDF in global mem)"
    Un autre nom auto-descriptif. Le tone mapping et la conversion de HSV vers
@@ -130,9 +130,9 @@ constante connue à la compilation.
 Les kernels acceptent des pointeurs `__restrict__` partout, dans l'espoir
 d'augmenter les opportunités d'optimisation pour le compilateur, d'après notre 
 connaissance du fait que nos pointeurs ne sont pas sujets à l'aliasing.
-[Je me base sur cet article de Mike Acton que j'avais lu il y a qelques années](https://cellperformance.beyond3d.com/articles/2006/05/demystifying-the-restrict-keyword.html).
+[Je me base aussi sur cet article de Mike Acton que j'avais lu il y a qelques années](https://cellperformance.beyond3d.com/articles/2006/05/demystifying-the-restrict-keyword.html).
 
-Les kernels sont lancés 200 fois afin de mieux évaluer leur performance.
+Les kernels sont lancés 200 fois pour que les mesures soient pertinentes.
 Ce nombre peut être changé; il se trouve à un seul endroit, dans
 `tone_map_gpu_rgb()`.
 
@@ -170,13 +170,13 @@ Les images testées sont les suivantes :
 
    |  Chateau  |   Nuit   |  Hawkes  |   Paris  |   Lena
 -----------------------------------------------------------
-K0 |  3.729295 | --TODO-- | 0.614809 | --TODO-- | 0.211583
-K1 |  3.813473 | --TODO-- | 0.632824 | --TODO-- | 0.216113
-K2 |  5.233018 | --TODO-- | 0.592985 | --TODO-- | 0.182630
-K3 |  1.450710 | --TODO-- | 0.195026 | --TODO-- | 0.067028
-K4 |  0.006714 | --TODO-- | 0.006832 | --TODO-- | 0.006900
-K5 |  3.716156 | --TODO-- | 0.459780 | --TODO-- | 0.221214
-K6 |  3.481602 | --TODO-- | 0.434734 | --TODO-- | 0.208767
+K0 |  3.729295 | 1.577751 | 0.614809 | 0.546846 | 0.211583
+K1 |  3.813473 | 1.539428 | 0.632824 | 0.551720 | 0.216113
+K2 |  5.233018 | 1.463505 | 0.592985 | 0.481364 | 0.182630
+K3 |  1.450710 | 0.482299 | 0.195026 | 0.159958 | 0.067028
+K4 |  0.006714 | 0.006849 | 0.006832 | 0.006769 | 0.006900
+K5 |  3.716156 | 1.366967 | 0.459780 | 0.412952 | 0.221214
+K6 |  3.481602 | 1.286395 | 0.434734 | 0.393162 | 0.208767
 
 
 **Table B. GeForce GT 635M, CUDA 2.1, arch=compute\_20, code=sm\_20**

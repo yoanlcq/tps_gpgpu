@@ -125,3 +125,36 @@ GPU: Tone mapping, then HSV to RGB (CDF in global mem): 3.836512 ms (200 times, 
 GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 3.859802 ms (200 times, 53x33 blocks of 32x32 threads)
 GPU: Downloading RGB data: 1.903424 ms
 GPU: Freeing memory: 0.506752 ms
+
+Compiled with arch=compute_50, code=sm_50
+Device: Quadro K620, CUDA 5.0
+Using image `images/Nuit.png`, 1680x1050 RGB
+GPU: Allocating 33518048 bytes (~31 MiB): 0.501760 ms
+GPU: Uploading RGB data (1D, 3 components): 1.012704 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 1.267104 ms
+GPU: RGB to HSV (RGB in 2D texture): 1.577751 ms (200 times, 53x33 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 1.539428 ms (200 times, 53x33 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 1.463505 ms (200 times, 53x33 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 0.482299 ms (200 times, 1723x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.006849 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 1.366967 ms (200 times, 53x33 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 1.286395 ms (200 times, 53x33 blocks of 32x32 threads)
+GPU: Downloading RGB data: 0.996544 ms
+GPU: Freeing memory: 0.371712 ms
+
+Compiled with arch=compute_50, code=sm_50
+Device: Quadro K620, CUDA 5.0
+Using image `images/Paris.png`, 1000x562 RGB
+GPU: Allocating 10680048 bytes (~10 MiB): 0.495584 ms
+GPU: Uploading RGB data (1D, 3 components): 0.407904 ms
+GPU: Uploading RGB data (2D, 3 components extended to 4): 0.416064 ms
+GPU: RGB to HSV (RGB in 2D texture): 0.546846 ms (200 times, 32x18 blocks of 32x32 threads)
+GPU: RGB to HSV (RGB in global mem): 0.551720 ms (200 times, 32x18 blocks of 32x32 threads)
+GPU: Histogram via per-pixel global atomicAdd(): 0.481364 ms (200 times, 32x18 blocks of 32x32 threads)
+GPU: Histogram using shared mem atomicAdd(): 0.159958 ms (200 times, 549x1 blocks of 1024x1 threads)
+GPU: CDF via inclusive scan of histogram: 0.006769 ms (200 times, 1x1 blocks of 128x1 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in global mem): 0.412952 ms (200 times, 32x18 blocks of 32x32 threads)
+GPU: Tone mapping, then HSV to RGB (CDF in constant mem): 0.393162 ms (200 times, 32x18 blocks of 32x32 threads)
+GPU: Downloading RGB data: 0.418784 ms
+GPU: Freeing memory: 0.356352 ms
+
